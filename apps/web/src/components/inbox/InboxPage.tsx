@@ -6,7 +6,14 @@ import type {
 } from "@t3tools/contracts";
 import { Link } from "@tanstack/react-router";
 import { MessagesSquareIcon, SendIcon } from "lucide-react";
-import { useEffect, useEffectEvent, useRef, useState, type CSSProperties } from "react";
+import {
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 
 import { isElectron } from "~/env";
 import { cn } from "~/lib/utils";
@@ -23,21 +30,29 @@ import { WorkspacePageHeader } from "../WorkspacePageHeader";
 import { sampleInboxPage } from "./inboxStaticData";
 
 const PAGE_SIZE = 50;
+const STICK_TO_BOTTOM_PX = 80;
 
 const CHANNEL_LABEL: Record<string, string> = {
   telegram: "Telegram",
   zulip: "Zulip",
 };
 
-const TIME_FORMAT = new Intl.DateTimeFormat(undefined, {
+const DAY_TIME_FORMAT = new Intl.DateTimeFormat(undefined, {
   month: "short",
   day: "numeric",
   hour: "2-digit",
   minute: "2-digit",
 });
+const TIME_FORMAT = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" });
+
+export interface InboxSearch {
+  readonly channel?: string;
+  readonly chat?: string;
+}
 
 interface InboxState {
   readonly channels: ReadonlyArray<DesktopInboxChannel>;
+  /** Oldest first, so the newest message sits at the bottom. */
   readonly messages: ReadonlyArray<DesktopInboxMessage>;
   readonly errors: DesktopInboxPage["errors"];
   readonly hasMore: boolean;
@@ -52,16 +67,58 @@ const EMPTY_INBOX: InboxState = {
   sample: false,
 };
 
-export interface InboxSearch {
-  readonly channel?: string;
-  readonly chat?: string;
-}
+// Reopening the Inbox or a chat shows what was loaded last time while the newest page refreshes.
+const inboxCache = new Map<string, InboxState>();
 
 async function loadInboxPage(input: DesktopInboxPageInput) {
   const live = await window.desktopBridge?.inbox.loadPage(input);
   return live && live.channels.length > 0
     ? { page: live, sample: false }
     : { page: sampleInboxPage(input), sample: true };
+}
+
+function mergeMessages(
+  current: ReadonlyArray<DesktopInboxMessage>,
+  incoming: ReadonlyArray<DesktopInboxMessage>,
+) {
+  const known = new Set(current.map((message) => message.id));
+  const fresh = incoming.filter((message) => !known.has(message.id));
+  return fresh.length === 0
+    ? current
+    : [...current, ...fresh].toSorted((a, b) => a.receivedAt.localeCompare(b.receivedAt));
+}
+
+interface MessageGroup {
+  readonly key: string;
+  readonly channelId: string;
+  readonly conversationId: string | null;
+  readonly conversation: string | null;
+  readonly messages: Array<DesktopInboxMessage>;
+}
+
+/** Consecutive messages of one chat share a card. */
+function groupByConversation(messages: ReadonlyArray<DesktopInboxMessage>) {
+  const groups: Array<MessageGroup> = [];
+  for (const message of messages) {
+    const last = groups.at(-1);
+    if (
+      last &&
+      last.channelId === message.channelId &&
+      last.conversationId === message.conversationId &&
+      last.conversation === message.conversation
+    ) {
+      last.messages.push(message);
+    } else {
+      groups.push({
+        key: message.id,
+        channelId: message.channelId,
+        conversationId: message.conversationId,
+        conversation: message.conversation,
+        messages: [message],
+      });
+    }
+  }
+  return groups;
 }
 
 function EnvironmentBadge({ channel }: { channel: DesktopInboxChannel }) {
@@ -79,50 +136,59 @@ export function InboxPage({ search }: { search: InboxSearch }) {
     search.channel !== undefined && search.chat !== undefined
       ? { channelId: search.channel, conversationId: search.chat }
       : null;
-  const [inbox, setInbox] = useState(EMPTY_INBOX);
+  const cacheKey = conversation ? `${conversation.channelId}:${conversation.conversationId}` : "";
+  const [inbox, setInbox] = useState(() => inboxCache.get(cacheKey) ?? EMPTY_INBOX);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const sentinelRef = useRef<HTMLLIElement | null>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
-  const requestRef = useRef({
-    loading: false,
-    done: false,
-    before: undefined as string | undefined,
-    seen: new Set<string>(),
-  });
+  const loadingRef = useRef(false);
+  // A list shown from the cache refreshes its newest page on the observer's first report.
+  const refreshNewestRef = useRef(inboxCache.has(cacheKey));
+  // Where the scroll position goes once the next list renders: the bottom, or the
+  // message that was at the top before older ones were added above it.
+  const anchorRef = useRef<"bottom" | { height: number; top: number } | null>("bottom");
 
-  const loadOlder = useEffectEvent(async () => {
-    const request = requestRef.current;
-    if (request.loading || request.done) return;
-    request.loading = true;
+  const load = useEffectEvent(async (direction: "older" | "newest") => {
+    if (loadingRef.current || (direction === "older" && !inbox.hasMore)) return;
+    loadingRef.current = true;
+    const before = direction === "older" ? inbox.messages[0]?.receivedAt : undefined;
     const loaded = await loadInboxPage({
       limit: PAGE_SIZE,
-      ...(request.before ? { before: request.before } : {}),
+      ...(before ? { before } : {}),
       ...(conversation ? { conversation } : {}),
     }).catch((error: unknown) => (error instanceof Error ? error.message : String(error)));
-    request.loading = false;
+    loadingRef.current = false;
     if (typeof loaded === "string") {
-      request.done = true;
-      setInbox((current) => ({
-        ...current,
-        hasMore: false,
+      setInbox({
+        ...inbox,
+        hasMore: direction === "older" ? false : inbox.hasMore,
         errors: [{ channelId: "", message: loaded }],
-      }));
+      });
       return;
     }
     const { page, sample } = loaded;
-    const fresh = page.messages.filter((message) => !request.seen.has(message.id));
-    for (const message of fresh) request.seen.add(message.id);
-    request.before = page.messages.at(-1)?.receivedAt ?? request.before;
-    // A page of only known messages would repeat forever with the same cursor.
-    request.done = !page.hasMore || fresh.length === 0;
-    const hasMore = !request.done;
-    setInbox((current) => ({
+    const messages = mergeMessages(inbox.messages, page.messages);
+    const next: InboxState = {
       channels: page.channels,
-      messages: [...current.messages, ...fresh],
+      messages,
       errors: page.errors,
-      hasMore,
+      // A page of only known messages would repeat forever with the same cursor.
+      hasMore: direction === "older" ? page.hasMore && messages !== inbox.messages : inbox.hasMore,
       sample,
-    }));
+    };
+    const scroller = scrollRef.current;
+    if (scroller && messages !== inbox.messages) {
+      const atBottom =
+        scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < STICK_TO_BOTTOM_PX;
+      anchorRef.current =
+        inbox.messages.length === 0 || (direction === "newest" && atBottom)
+          ? "bottom"
+          : direction === "older"
+            ? { height: scroller.scrollHeight, top: scroller.scrollTop }
+            : null;
+    }
+    inboxCache.set(cacheKey, next);
+    setInbox(next);
     // A short page can leave the sentinel in range; observing again reports it once more.
     const sentinel = sentinelRef.current;
     if (sentinel && observerRef.current) {
@@ -131,13 +197,30 @@ export function InboxPage({ search }: { search: InboxSearch }) {
     }
   });
 
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- IntersectionObserver on the end-of-list sentinel loads the first and each older page
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- restores the scroll position after messages are added above or below what is on screen
+  useLayoutEffect(() => {
+    const scroller = scrollRef.current;
+    const anchor = anchorRef.current;
+    if (!scroller || anchor === null) return;
+    anchorRef.current = null;
+    scroller.scrollTop =
+      anchor === "bottom"
+        ? scroller.scrollHeight
+        : anchor.top + scroller.scrollHeight - anchor.height;
+  });
+
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- IntersectionObserver on the top-of-list sentinel loads older pages; a cached list also refreshes its newest page once
   useEffect(() => {
     const sentinel = sentinelRef.current;
     if (!sentinel) return;
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry?.isIntersecting) void loadOlder();
+        if (refreshNewestRef.current) {
+          refreshNewestRef.current = false;
+          void load("newest");
+        } else if (entry?.isIntersecting) {
+          void load("older");
+        }
       },
       { root: scrollRef.current, rootMargin: "600px 0px" },
     );
@@ -150,7 +233,8 @@ export function InboxPage({ search }: { search: InboxSearch }) {
   }, []);
 
   const channelById = new Map(inbox.channels.map((channel) => [channel.id, channel]));
-  const conversationName = conversation ? (inbox.messages[0]?.conversation ?? "Chat") : null;
+  const conversationName = conversation ? (inbox.messages.at(-1)?.conversation ?? "Chat") : null;
+  const groups = groupByConversation(inbox.messages);
 
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none">
@@ -178,97 +262,116 @@ export function InboxPage({ search }: { search: InboxSearch }) {
               </>
             )}
           </WorkspaceBreadcrumb>
+          <div className="min-w-0 flex-1" />
+          <div className="flex shrink-0 items-center gap-2">
+            {inbox.sample ? (
+              <span className="text-xs text-muted-foreground">Sample data</span>
+            ) : null}
+            {inbox.channels.map((channel) => (
+              <EnvironmentBadge key={channel.id} channel={channel} />
+            ))}
+          </div>
         </WorkspacePageHeader>
 
         <div
           ref={scrollRef}
           className="topbar-scroll-fade scrollbar-gutter-both min-h-0 flex-1 overflow-y-auto"
         >
-          <WorkspacePageContainer width="readable" className="gap-4">
-            <div className="flex flex-wrap items-center gap-2">
-              {inbox.channels.map((channel) => (
-                <EnvironmentBadge key={channel.id} channel={channel} />
-              ))}
-              {inbox.sample ? (
-                <span className="ml-auto text-xs text-muted-foreground">Sample data</span>
-              ) : null}
-            </div>
-
+          <WorkspacePageContainer width="readable" className="min-h-full justify-end gap-4">
+            <ul className="m-0 flex list-none flex-col gap-2 p-0">
+              <li ref={sentinelRef} className="py-4 text-center text-xs text-muted-foreground">
+                {inbox.hasMore ? "Loading messages…" : "No older messages"}
+              </li>
+              {groups.map((group) => {
+                const channel = channelById.get(group.channelId);
+                if (!channel) return null;
+                const first = group.messages[0]!;
+                return (
+                  <li
+                    key={group.key}
+                    style={{ "--label": channel.color } as CSSProperties}
+                    className="flex flex-col gap-2 rounded-lg border border-l-4 border-l-(--label) bg-(--label)/5 px-4 py-3"
+                  >
+                    {conversation === null ? (
+                      <div className="flex min-w-0 items-center gap-2">
+                        {group.conversationId !== null ? (
+                          <Link
+                            to="/inbox"
+                            search={{ channel: group.channelId, chat: group.conversationId }}
+                            className="min-w-0 truncate text-sm font-semibold underline-offset-2 hover:underline"
+                          >
+                            {group.conversation ?? "Chat"}
+                          </Link>
+                        ) : (
+                          <span className="min-w-0 truncate text-sm font-semibold">
+                            {group.conversation}
+                          </span>
+                        )}
+                        <span className="flex-1" />
+                        <EnvironmentBadge channel={channel} />
+                        <time
+                          dateTime={first.receivedAt}
+                          className="shrink-0 text-xs text-muted-foreground tabular-nums"
+                        >
+                          {DAY_TIME_FORMAT.format(new Date(first.receivedAt))}
+                        </time>
+                      </div>
+                    ) : null}
+                    <ul className="m-0 flex list-none flex-col gap-1 p-0">
+                      {group.messages.map((message, index) => {
+                        const sameSender = group.messages[index - 1]?.sender === message.sender;
+                        return (
+                          <li key={message.id} className="flex min-w-0 items-baseline gap-2">
+                            <div className="min-w-0 flex-1">
+                              {sameSender ? null : (
+                                <div
+                                  className={cn(
+                                    "text-xs font-medium text-muted-foreground",
+                                    index > 0 && "mt-1.5",
+                                  )}
+                                >
+                                  {message.sender ?? "Unknown"}
+                                </div>
+                              )}
+                              <p
+                                className={cn(
+                                  "m-0 text-sm wrap-break-word whitespace-pre-wrap",
+                                  message.unread
+                                    ? "font-medium text-foreground"
+                                    : "text-foreground/80",
+                                )}
+                              >
+                                {message.text}
+                              </p>
+                            </div>
+                            {message.unread ? (
+                              <span
+                                role="img"
+                                aria-label="Unread"
+                                className="size-2 shrink-0 self-center rounded-full bg-(--label)"
+                              />
+                            ) : null}
+                            <time
+                              dateTime={message.receivedAt}
+                              className="shrink-0 text-xs text-muted-foreground tabular-nums"
+                            >
+                              {(conversation === null ? TIME_FORMAT : DAY_TIME_FORMAT).format(
+                                new Date(message.receivedAt),
+                              )}
+                            </time>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </li>
+                );
+              })}
+            </ul>
             {inbox.errors.map((error) => (
               <p key={error.channelId} className="m-0 text-sm text-destructive-foreground">
                 {channelById.get(error.channelId)?.label ?? "Inbox"}: {error.message}
               </p>
             ))}
-
-            <ul className="m-0 flex list-none flex-col gap-2 p-0">
-              {inbox.messages.map((message) => {
-                const channel = channelById.get(message.channelId);
-                if (!channel) return null;
-                return (
-                  <li
-                    key={message.id}
-                    style={{ "--label": channel.color } as CSSProperties}
-                    className="flex flex-col gap-1.5 rounded-lg border border-l-4 border-l-(--label) bg-(--label)/5 px-4 py-3"
-                  >
-                    <div className="flex min-w-0 items-center gap-2">
-                      {message.unread ? (
-                        <span
-                          role="img"
-                          aria-label="Unread"
-                          className="size-2 shrink-0 rounded-full bg-(--label)"
-                        />
-                      ) : null}
-                      <span
-                        className={cn(
-                          "truncate text-sm",
-                          message.unread ? "font-semibold" : "font-medium",
-                        )}
-                      >
-                        {message.sender ?? "Unknown"}
-                      </span>
-                      {conversation === null && message.conversationId !== null ? (
-                        <Link
-                          to="/inbox"
-                          search={{ channel: message.channelId, chat: message.conversationId }}
-                          className="min-w-0 truncate text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-                        >
-                          {message.conversation ?? "Chat"}
-                        </Link>
-                      ) : (
-                        <span className="min-w-0 truncate text-xs text-muted-foreground">
-                          {message.conversation}
-                        </span>
-                      )}
-                      <span className="flex-1" />
-                      <EnvironmentBadge channel={channel} />
-                      <time
-                        dateTime={message.receivedAt}
-                        className="shrink-0 text-xs text-muted-foreground tabular-nums"
-                      >
-                        {TIME_FORMAT.format(new Date(message.receivedAt))}
-                      </time>
-                    </div>
-                    <p
-                      className={cn(
-                        "m-0 text-sm wrap-break-word whitespace-pre-wrap",
-                        message.unread ? "text-foreground" : "text-muted-foreground",
-                      )}
-                    >
-                      {message.text}
-                    </p>
-                  </li>
-                );
-              })}
-              {inbox.hasMore ? (
-                <li ref={sentinelRef} className="py-4 text-center text-xs text-muted-foreground">
-                  Loading messages…
-                </li>
-              ) : (
-                <li className="py-4 text-center text-xs text-muted-foreground">
-                  No older messages
-                </li>
-              )}
-            </ul>
           </WorkspacePageContainer>
         </div>
       </div>
