@@ -137,6 +137,13 @@ je další existující pojistka při spuštění. Neměníme aktualizace agentn
 providerů. Nepoužívej oficiální `t3 update`, service update ani přeinstalaci
 z Homebrew/npm k aktualizaci forku: vlastní kód aktualizuje níže uvedený Git postup.
 
+macOS sestavení používají vlastní [ikonu Garden](assets/garden/icon.png).
+Builder z ní vytváří všechny velikosti ICNS; upstream `icons:export` ji nepřepisuje.
+Pro čisté záhlaví bez vesmírného pozadí je v klientském profilu Garden nastaveno
+**Settings → Appearance → Interface → Advanced → Environment identification → None**.
+U nového profilu tuto existující volbu nastav znovu; jde o nastavení klienta,
+nikoli serveru, ke kterému je připojený.
+
 ## Garden jako klient běžícího T3 Code
 
 Pro běžné používání je Garden připojený k existujícímu serveru T3 Code na tomto
