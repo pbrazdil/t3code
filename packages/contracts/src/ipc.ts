@@ -341,6 +341,41 @@ export const DesktopCliCommandStateSchema = Schema.Struct({
 });
 export type DesktopCliCommandState = typeof DesktopCliCommandStateSchema.Type;
 
+export const DesktopInboxChannelSchema = Schema.Struct({
+  id: Schema.String,
+  label: Schema.String,
+  /** Channel kind, such as `telegram` or `zulip`. */
+  channel: Schema.String,
+  color: Schema.String,
+});
+export type DesktopInboxChannel = typeof DesktopInboxChannelSchema.Type;
+
+export const DesktopInboxMessageSchema = Schema.Struct({
+  id: Schema.String,
+  channelId: Schema.String,
+  sender: Schema.NullOr(Schema.String),
+  conversation: Schema.NullOr(Schema.String),
+  text: Schema.String,
+  receivedAt: Schema.String,
+  unread: Schema.Boolean,
+});
+export type DesktopInboxMessage = typeof DesktopInboxMessageSchema.Type;
+
+export const DesktopInboxPageInputSchema = Schema.Struct({
+  limit: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 200 })),
+  /** ISO time; only messages older than it are returned. */
+  before: Schema.optionalKey(Schema.String),
+});
+export type DesktopInboxPageInput = typeof DesktopInboxPageInputSchema.Type;
+
+export const DesktopInboxPageSchema = Schema.Struct({
+  channels: Schema.Array(DesktopInboxChannelSchema),
+  messages: Schema.Array(DesktopInboxMessageSchema),
+  hasMore: Schema.Boolean,
+  errors: Schema.Array(Schema.Struct({ channelId: Schema.String, message: Schema.String })),
+});
+export type DesktopInboxPage = typeof DesktopInboxPageSchema.Type;
+
 export interface DesktopUpdateActionResult {
   accepted: boolean;
   completed: boolean;
@@ -1145,6 +1180,10 @@ export interface DesktopBridge {
     install: () => Promise<DesktopCliCommandState>;
     uninstall: () => Promise<DesktopCliCommandState>;
     addToPath: () => Promise<DesktopCliCommandState>;
+  };
+  /** Garden: messages from the channels configured in `<home>/inbox/channels.json`. */
+  inbox: {
+    loadPage: (input: DesktopInboxPageInput) => Promise<DesktopInboxPage>;
   };
   webLinks: {
     setReady: (ready: boolean) => Promise<void>;
