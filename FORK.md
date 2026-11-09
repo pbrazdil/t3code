@@ -79,6 +79,15 @@ i profily Electronu pod `<home>/electron`. Dev runner do této proměnné přev�
 Bez explicitního home zůstává chování upstreamu. Nic z živého profilu se nemigruje
 do profilu forku; případná potřebná přihlášení se provedou samostatně.
 
+Fork má vlastní název `T3 Code Fork` a bundle ID `com.pbrazdil.t3code`, aby jej
+macOS odlišil od oficiální aplikace i při přístupu k šifrovacímu klíči Electronu
+v Klíčence. Vnitřní název zabalené aplikace je `t3code-fork`; také ten musí zůstat
+odlišný, protože Electron vybírá položku Klíčenky před asynchronní inicializací
+desktopu. Nepodepsané nové sestavení přesto může při další aktualizaci vyžadovat
+ruční potvrzení přístupu k vlastní položce Klíčenky; stabilní podepisování není
+součástí této přípravy. Viz [Electron: code signing](https://www.electronjs.org/docs/latest/tutorial/code-signing).
+Případný systémový dialog řeší uživatel; šifrování nevypínej.
+
 Pro vlastní instalační artefakty použij existující preview verzi, která v builderu
 vypíná update feed i při zděděné konfiguraci GitHubu:
 
@@ -103,8 +112,9 @@ ditto -x -k "release/$fork_version/T3-Code-$fork_version-arm64.zip" \
   "release/$fork_version/app"
 mkdir -p "$PWD/.t3/desktop/userdata"
 touch "$PWD/.t3/desktop/userdata/cli-command-first-launch"
-T3CODE_HOME="$PWD/.t3/desktop" T3CODE_DISABLE_AUTO_UPDATE=true \
-  "release/$fork_version/app/T3 Code (Beta).app/Contents/MacOS/T3 Code (Beta)"
+env -u ELECTRON_RUN_AS_NODE -u T3CODE_CLI_PATH -u T3CODE_THREAD_ID \
+  T3CODE_HOME="$PWD/.t3/desktop" T3CODE_DISABLE_AUTO_UPDATE=true \
+  "release/$fork_version/app/T3 Code Fork (Beta).app/Contents/MacOS/T3 Code Fork (Beta)"
 ```
 
 Zabalený Electron používá `T3CODE_HOME`; `--home-dir` je zde příkaz dev runneru
@@ -114,6 +124,8 @@ jejím obecným názvem. Pro dev, zabalenou aplikaci a ověření používej rů
 Marker `cli-command-first-launch` vypíná jednorázové automatické přidání příkazu
 `t3` do uživatelského PATH; vytvoř jej také v novém ověřovacím home. Lokální
 launcher pod `<home>/bin` je v pořádku, globální příkaz nepřebírej.
+Odstranění zděděného `ELECTRON_RUN_AS_NODE` je nutné při spouštění z agenta uvnitř
+T3 Code; jinak se binárka spustí jako Node místo desktopu. Dev launcher to řeší sám.
 
 Desktopový updater bez feedu zůstává vypnutý; `T3CODE_DISABLE_AUTO_UPDATE=true`
 je další existující pojistka při spuštění. Neměníme aktualizace agentních
