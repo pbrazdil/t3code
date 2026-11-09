@@ -25,77 +25,80 @@ export const INBOX_ENVIRONMENTS: ReadonlyArray<InboxEnvironment> = [
   { id: "braiins", label: "Braiins", channel: "zulip", color: "#f59e0b" },
 ];
 
-export const INBOX_MESSAGES: ReadonlyArray<InboxMessage> = [
+const SAMPLE_MESSAGES: ReadonlyArray<Omit<InboxMessage, "id" | "receivedAt" | "unread">> = [
   {
-    id: "m1",
     environmentId: "veroc",
     sender: "Veronika",
     conversation: "Veroc",
     text: "The invoice export finished. Can you check the totals before I send it out?",
-    receivedAt: "2026-11-09T20:42:00Z",
-    unread: true,
   },
   {
-    id: "m2",
     environmentId: "braiins",
     sender: "Jan Novák",
     conversation: "#engineering > release 26.11",
     text: "Release branch is cut. Please hold merges to main until the smoke tests pass.",
-    receivedAt: "2026-11-09T20:15:00Z",
-    unread: true,
   },
   {
-    id: "m3",
     environmentId: "mac-studio",
     sender: "Garden agent",
     conversation: "#agents > garden fork",
     text: "Rebase onto upstream finished without conflicts. Waiting for approval to push custom.",
-    receivedAt: "2026-11-09T19:58:00Z",
-    unread: true,
   },
   {
-    id: "m4",
     environmentId: "veroc",
     sender: "Veronika",
     conversation: "Veroc",
     text: "Also, the calendar sync skipped two events from last week.",
-    receivedAt: "2026-11-09T18:30:00Z",
-    unread: false,
   },
   {
-    id: "m5",
     environmentId: "braiins",
     sender: "Eva Svobodová",
     conversation: "#design > inbox",
     text: "New mockups for the unified inbox are in Figma. Feedback welcome by Thursday.",
-    receivedAt: "2026-11-09T16:05:00Z",
-    unread: false,
   },
   {
-    id: "m6",
     environmentId: "mac-studio",
     sender: "Garden agent",
     conversation: "#agents > builds",
-    text: "Desktop build 0.1.7-preview.20261109.6 is ready to install.",
-    receivedAt: "2026-11-09T14:47:00Z",
-    unread: false,
+    text: "The desktop build is ready to install.",
   },
   {
-    id: "m7",
     environmentId: "veroc",
     sender: "Veroc bot",
     conversation: "Veroc alerts",
     text: "Nightly backup completed in 4 minutes.",
-    receivedAt: "2026-11-09T03:02:00Z",
-    unread: false,
   },
   {
-    id: "m8",
     environmentId: "braiins",
     sender: "Jan Novák",
     conversation: "#engineering > incidents",
     text: "Postmortem for Friday's outage is published. Action items are assigned.",
-    receivedAt: "2026-11-08T17:20:00Z",
-    unread: false,
   },
 ];
+
+const NEWEST_RECEIVED_AT = Date.parse("2026-11-09T20:42:00Z");
+const MESSAGE_INTERVAL_MS = 47 * 60_000;
+const INBOX_MESSAGE_COUNT = 240;
+const UNREAD_COUNT = 3;
+
+/** Newest first. */
+const INBOX_MESSAGES: ReadonlyArray<InboxMessage> = Array.from(
+  { length: INBOX_MESSAGE_COUNT },
+  (_, index) => ({
+    ...SAMPLE_MESSAGES[index % SAMPLE_MESSAGES.length]!,
+    id: `m${index}`,
+    receivedAt: new Date(NEWEST_RECEIVED_AT - index * MESSAGE_INTERVAL_MS).toISOString(),
+    unread: index < UNREAD_COUNT,
+  }),
+);
+
+const INBOX_PAGE_SIZE = 50;
+
+/** Stands in for the paged channel fetch: one page of older messages after `offset`. */
+export function loadInboxPage(offset: number): {
+  readonly messages: ReadonlyArray<InboxMessage>;
+  readonly hasMore: boolean;
+} {
+  const messages = INBOX_MESSAGES.slice(offset, offset + INBOX_PAGE_SIZE);
+  return { messages, hasMore: offset + messages.length < INBOX_MESSAGES.length };
+}
