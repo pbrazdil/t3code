@@ -79,6 +79,10 @@ Explicitní `T3CODE_HOME` tento home nahradí; dev runner do této proměnné p�
 `--home-dir`. Tím jsou oddělené Chromium databáze, cookies i zámek jedné instance.
 Nic z živého profilu T3 Code se nemigruje; potřebná přihlášení se provedou samostatně.
 
+T3 Connect je v sestavení dostupný jen s veřejnou konfigurací v gitignorovaném
+`.env` (`cp .env.example .env`). Bez něj Garden přihlášení k T3 Connect nenabízí.
+Soubor se necommituje; po novém checkoutu jej vytvoř znovu před sestavením.
+
 Fork má vlastní název `Garden` a bundle ID `com.pbrazdil.garden`, aby jej
 macOS odlišil od oficiální aplikace i při přístupu k šifrovacímu klíči Electronu
 v Klíčence. Vnitřní název zabalené aplikace je `garden`; také ten musí zůstat
