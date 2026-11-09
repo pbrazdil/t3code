@@ -137,6 +137,36 @@ je další existující pojistka při spuštění. Neměníme aktualizace agentn
 providerů. Nepoužívej oficiální `t3 update`, service update ani přeinstalaci
 z Homebrew/npm k aktualizaci forku: vlastní kód aktualizuje níže uvedený Git postup.
 
+## Garden jako klient běžícího T3 Code
+
+Pro běžné používání je Garden připojený k existujícímu serveru T3 Code na tomto
+Macu. V Garden je v **Settings → Environments** vypnuté **Local environment**
+a zapnuté připojení **Petr’s Mac Studio** přes **This device**. Spuštění:
+
+```sh
+open /Applications/Garden.app
+```
+
+T3 Code musí zůstat běžet. Jedině jeho server vlastní `~/.t3/userdata`; Garden
+čte projekty a historii a odesílá změny přes serverové API. Klientský profil
+a uložené připojení Garden zůstávají pod `~/.garden`. Nenastavuj Garden
+`T3CODE_HOME=~/.t3`, nesymlinkuj datové adresáře a nespouštěj druhý server nad
+živými daty. Původní samostatná data Garden zachovej; tento režim je neslučuje.
+
+Při novém párování vytvoř v T3 Code v **Settings → Sharing & access** jednorázový
+odkaz pro **This machine** s popisem `Garden desktop`. V Garden jej přidej přes
+**Settings → Environments → Add environment**, ověř připojení a teprve potom
+vypni **Local environment**. Jeho vypnutí restartuje Garden a zastaví jeho vlastní
+agenty a terminály; předem ověř, že zde neběží potřebná práce. Párovací kódy ani
+uložené přihlašovací údaje necommituj. Není potřeba měnit síťové sdílení serveru.
+
+Po aktualizaci ověř také opětovné připojení po spuštění, dostupnost existujícího
+projektu a vlákna a vypnuté **Local environment**. Klient a server mohou mít různé
+verze, proto samotné úspěšné sestavení nepotvrzuje jejich kompatibilitu. V tomto
+režimu se používá serverový kód T3 Code; serverové změny forku testuj s vlastním
+serverem a odděleným home podle postupu výše. Přechod vlastnictví živých dat na
+server Garden je samostatná migrace, nikoli součást aktualizace klienta.
+
 ## Aktualizace upstreamu: a–h
 
 Kroky prováděj v tomto pořadí v jednom samostatném Bash shellu. Při jakékoli
