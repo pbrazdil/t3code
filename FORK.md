@@ -1,7 +1,7 @@
-# Petrův fork T3 Code
+# Garden
 
 Fork: <https://github.com/pbrazdil/t3code>. Upstream: <https://github.com/pingdotgg/t3code>.
-Checkout: `/Users/petrbrazdil/Repos/gardener/t3code`.
+Checkout: `/Users/petrbrazdil/Repos/garden/t3code`.
 
 `main` je přesná kopie zaznamenaného `upstream/main`. Veškeré vlastní změny patří do
 `custom`, která sleduje `origin/custom`. Jedna logická změna má jeden commit.
@@ -22,7 +22,7 @@ Na tomto stroji je `vp` v `~/.local/share/vite-plus/bin` a jeho prostředí v
 zvol projektové verze bez změny globálních výchozích verzí:
 
 ```sh
-cd /Users/petrbrazdil/Repos/gardener/t3code
+cd /Users/petrbrazdil/Repos/garden/t3code
 . "$HOME/.config/vite-plus/env"
 eval "$(vp env exec \
   --node "$(node -p 'require("./package.json").engines.node')" \
@@ -73,15 +73,15 @@ se stejným `--home-dir` a `--no-seed`. Ověř jeho privátní Tailscale Serve m
 a předej vypsanou HTTPS pairing URL; token necommituj. Zachovej ostatní Serve
 mapování a nepovoluj Funnel. Desktop dev režim `--share` nepodporuje.
 
-Vlastní změna v `DesktopEnvironment.ts` ukládá při explicitním `T3CODE_HOME`
-i profily Electronu pod `<home>/electron`. Dev runner do této proměnné převádí
+Nativní `Garden.app` lze spustit přímo z Finderu. Bez konfigurace používá vlastní
+home `~/.garden`: databázi pod `userdata` a profily Electronu pod `electron`.
+Explicitní `T3CODE_HOME` tento home nahradí; dev runner do této proměnné převádí
 `--home-dir`. Tím jsou oddělené Chromium databáze, cookies i zámek jedné instance.
-Bez explicitního home zůstává chování upstreamu. Nic z živého profilu se nemigruje
-do profilu forku; případná potřebná přihlášení se provedou samostatně.
+Nic z živého profilu T3 Code se nemigruje; potřebná přihlášení se provedou samostatně.
 
-Fork má vlastní název `T3 Code Fork` a bundle ID `com.pbrazdil.t3code`, aby jej
+Fork má vlastní název `Garden` a bundle ID `com.pbrazdil.garden`, aby jej
 macOS odlišil od oficiální aplikace i při přístupu k šifrovacímu klíči Electronu
-v Klíčence. Vnitřní název zabalené aplikace je `t3code-fork`; také ten musí zůstat
+v Klíčence. Vnitřní název zabalené aplikace je `garden`; také ten musí zůstat
 odlišný, protože Electron vybírá položku Klíčenky před asynchronní inicializací
 desktopu. Nepodepsané nové sestavení přesto může při další aktualizaci vyžadovat
 ruční potvrzení přístupu k vlastní položce Klíčenky; stabilní podepisování není
@@ -108,22 +108,27 @@ ZIP rozbal do nového adresáře mimo `/Applications`, například:
 
 ```sh
 mkdir -p "release/$fork_version/app"
-ditto -x -k "release/$fork_version/T3-Code-$fork_version-arm64.zip" \
+ditto -x -k "release/$fork_version/Garden-$fork_version-arm64.zip" \
   "release/$fork_version/app"
-mkdir -p "$PWD/.t3/desktop/userdata"
-touch "$PWD/.t3/desktop/userdata/cli-command-first-launch"
+open "release/$fork_version/app/Garden.app"
+```
+
+Aplikaci lze také zkopírovat jako `/Applications/Garden.app`, pokud tam již není
+jiná instalace; stávající aplikaci nejprve ověř a zachovej. Pro oddělené ověření
+zabaleného klienta z terminálu použij například:
+
+```sh
 env -u ELECTRON_RUN_AS_NODE -u T3CODE_CLI_PATH -u T3CODE_THREAD_ID \
   T3CODE_HOME="$PWD/.t3/desktop" T3CODE_DISABLE_AUTO_UPDATE=true \
-  "release/$fork_version/app/T3 Code Fork (Beta).app/Contents/MacOS/T3 Code Fork (Beta)"
+  "release/$fork_version/app/Garden.app/Contents/MacOS/Garden"
 ```
 
 Zabalený Electron používá `T3CODE_HOME`; `--home-dir` je zde příkaz dev runneru
-a serverového CLI, nikoli přepínač desktopové aplikace. Fork nikdy nespouštěj
-bez výslovně zvoleného home. Nekopíruj jej přes běžnou instalaci a neotevírej ho
-jejím obecným názvem. Pro dev, zabalenou aplikaci a ověření používej různá home.
-Marker `cli-command-first-launch` vypíná jednorázové automatické přidání příkazu
-`t3` do uživatelského PATH; vytvoř jej také v novém ověřovacím home. Lokální
-launcher pod `<home>/bin` je v pořádku, globální příkaz nepřebírej.
+a serverového CLI, nikoli přepínač desktopové aplikace. Pro běžné používání je
+výchozí `~/.garden` bezpečně oddělené od T3 Code. Pro dev a ověření používej
+explicitní různá home. Garden automaticky neinstaluje globální příkaz `t3` ani
+nemění PATH. Lokální launcher pod `<home>/bin` zůstává dostupný; ruční instalace
+přes Settings je samostatné rozhodnutí uživatele.
 Odstranění zděděného `ELECTRON_RUN_AS_NODE` je nutné při spouštění z agenta uvnitř
 T3 Code; jinak se binárka spustí jako Node místo desktopu. Dev launcher to řeší sám.
 
@@ -142,7 +147,7 @@ Necommituj a nestashuj automaticky práci jiného člověka nebo agenta.
 
 ```bash
 set -euo pipefail
-cd /Users/petrbrazdil/Repos/gardener/t3code
+cd /Users/petrbrazdil/Repos/garden/t3code
 test -z "$(git status --porcelain=v1)"
 for state in MERGE_HEAD CHERRY_PICK_HEAD REVERT_HEAD rebase-merge rebase-apply sequencer; do
   test ! -e "$(git rev-parse --git-path "$state")"
@@ -274,7 +279,9 @@ Pro používaný macOS klient spusť výše uvedený `vp run dist:desktop:dmg` s
 verzí a novým výstupním adresářem. Nepoužívej staré bundly přes `--skip-build`.
 Nespouštěj plošné kontroly, které aktuální `AGENTS.md` přenechává CI.
 
-Ověř skutečné spuštění vývojové i zabalené verze. Pro ověření zabalené verze použij
+Ověř skutečné spuštění vývojové i zabalené verze. Ověř také start `Garden.app`
+bez `T3CODE_HOME`, který musí použít `~/.garden` a nesmí instalovat globální `t3`.
+Pro ověření zabalené verze s testovacími konverzacemi použij
 nové `.t3/verify-<id>`; jako nesenzitivní data lze do jeho `userdata/statev2.sqlite`
 zkopírovat `scripts/fixtures/desktop-launch/statev2.sqlite`. Ve skutečném klientu
 otevři vlákno „Release launch check“ a zkontroluj jeho zprávu. Ověř:

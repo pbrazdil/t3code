@@ -85,7 +85,7 @@ export class DesktopEnvironment extends Context.Service<
   }
 >()("@t3tools/desktop/app/DesktopEnvironment") {}
 
-const APP_BASE_NAME = "T3 Code Fork";
+const APP_BASE_NAME = "Garden";
 
 function resolveDesktopAppStageLabel(input: {
   readonly isDevelopment: boolean;
@@ -106,7 +106,7 @@ export function resolveDesktopAppBranding(input: {
   return {
     baseName: APP_BASE_NAME,
     stageLabel,
-    displayName: `${APP_BASE_NAME} (${stageLabel})`,
+    displayName: input.isDevelopment ? `${APP_BASE_NAME} (Dev)` : APP_BASE_NAME,
   };
 }
 
@@ -148,23 +148,13 @@ const make = Effect.fn("desktop.environment.make")(function* (
   const homeDirectory = input.homeDirectory;
   const devServerUrl = config.devServerUrl;
   const isDevelopment = Option.isSome(devServerUrl);
-  // An explicit T3 home must also isolate Chromium databases and the single-instance lock.
-  const appDataDirectory = Option.match(config.t3Home, {
-    onSome: (directory) => path.resolve(directory, "electron"),
-    onNone: () =>
-      input.platform === "win32"
-        ? Option.getOrElse(config.appDataDirectory, () =>
-            path.join(homeDirectory, "AppData", "Roaming"),
-          )
-        : input.platform === "darwin"
-          ? path.join(homeDirectory, "Library", "Application Support")
-          : Option.getOrElse(config.xdgConfigHome, () => path.join(homeDirectory, ".config")),
-  });
   const baseDir = resolveDesktopBaseDir({
     homeDirectory,
     joinPath: path.join,
     t3Home: config.t3Home,
   });
+  // Finder launches must isolate Chromium databases and the single-instance lock too.
+  const appDataDirectory = path.resolve(baseDir, "electron");
   const rootDir = path.resolve(input.dirname, "../../..");
   const appRoot = input.isPackaged ? input.appPath : rootDir;
   const serverRoot =
@@ -232,7 +222,7 @@ const make = Effect.fn("desktop.environment.make")(function* (
     branding,
     displayName,
     appUserModelId: Option.getOrElse(config.appUserModelIdOverride, () =>
-      isDevelopment ? "com.t3tools.t3code.dev" : "com.t3tools.t3code",
+      isDevelopment ? "com.pbrazdil.garden.dev" : "com.pbrazdil.garden",
     ),
     linuxDesktopEntryName: resolveLinuxDesktopEntryName(isDevelopment),
     linuxApplicationsDir,
