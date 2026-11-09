@@ -6,6 +6,7 @@ import * as Layer from "effect/Layer";
 
 import * as DesktopEnvironment from "./DesktopEnvironment.ts";
 import * as DesktopConfig from "./DesktopConfig.ts";
+import { resolveUserDataPath } from "./DesktopUserData.ts";
 
 const defaultInput = {
   dirname: "/repo/apps/desktop/dist-electron",
@@ -70,6 +71,28 @@ describe("DesktopEnvironment", () => {
 
       assert.equal(development.stateDir, "/Users/alice/.t3/dev");
       assert.equal(production.stateDir, "/Users/alice/.t3/userdata");
+      assert.equal(production.appDataDirectory, "/Users/alice/Library/Application Support");
     }),
+  );
+
+  it.effect.each([false, true])(
+    "isolates the Electron profile with an explicit T3 home (development=%s)",
+    (isDevelopment) =>
+      Effect.gen(function* () {
+        const environment = yield* makeEnvironment(
+          { isPackaged: !isDevelopment },
+          {
+            T3CODE_HOME: "/isolated/t3-fork",
+            ...(isDevelopment ? { VITE_DEV_SERVER_URL: "http://localhost:5173" } : {}),
+          },
+        );
+
+        assert.equal(environment.stateDir, "/isolated/t3-fork/userdata");
+        assert.equal(environment.appDataDirectory, "/isolated/t3-fork/electron");
+        assert.equal(
+          yield* resolveUserDataPath(environment),
+          `/isolated/t3-fork/electron/${isDevelopment ? "t3code-dev" : "t3code-v2"}`,
+        );
+      }).pipe(Effect.provide(NodeServices.layer)),
   );
 });
