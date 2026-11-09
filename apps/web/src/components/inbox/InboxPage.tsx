@@ -5,8 +5,9 @@ import type {
   DesktopInboxPageInput,
 } from "@t3tools/contracts";
 import { Link } from "@tanstack/react-router";
-import { MessagesSquareIcon, SendIcon } from "lucide-react";
+import { MessagesSquareIcon, PaperclipIcon, SendIcon } from "lucide-react";
 import {
+  Fragment,
   useEffect,
   useEffectEvent,
   useLayoutEffect,
@@ -37,12 +38,6 @@ const CHANNEL_LABEL: Record<string, string> = {
   zulip: "Zulip",
 };
 
-const DAY_TIME_FORMAT = new Intl.DateTimeFormat(undefined, {
-  month: "short",
-  day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-});
 const TIME_FORMAT = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" });
 
 export interface InboxSearch {
@@ -119,6 +114,73 @@ function groupByConversation(messages: ReadonlyArray<DesktopInboxMessage>) {
     }
   }
   return groups;
+}
+
+const DAY_FORMAT = new Intl.DateTimeFormat(undefined, {
+  weekday: "short",
+  month: "short",
+  day: "numeric",
+});
+
+function dayOf(message: DesktopInboxMessage) {
+  return new Date(message.receivedAt).toDateString();
+}
+
+function MessageBubble({
+  message,
+  showSender,
+}: {
+  message: DesktopInboxMessage;
+  showSender: boolean;
+}) {
+  const own = message.sender === "You";
+  return (
+    <li className={cn("flex min-w-0 flex-col gap-0.5", own ? "items-end" : "items-start")}>
+      {showSender && !own ? (
+        <span className="px-1 text-xs font-medium text-muted-foreground">
+          {message.sender ?? "Unknown"}
+        </span>
+      ) : null}
+      <div className={cn("flex max-w-4/5 items-end gap-2", own && "flex-row-reverse")}>
+        <div
+          className={cn(
+            "flex min-w-0 flex-col gap-1.5 rounded-2xl px-3 py-1.5 text-sm",
+            own ? "rounded-br-md bg-(--label)/15" : "rounded-bl-md bg-muted",
+            message.unread && "font-medium",
+          )}
+        >
+          {message.media?.image ? (
+            <img
+              src={message.media.image}
+              alt={message.media.label}
+              className="h-40 max-w-full rounded-lg object-cover"
+            />
+          ) : message.media ? (
+            <span className="flex items-center gap-1.5 text-muted-foreground italic">
+              <PaperclipIcon aria-hidden className="size-3.5 shrink-0" />
+              {message.media.label}
+            </span>
+          ) : null}
+          {message.text ? (
+            <p className="m-0 wrap-break-word whitespace-pre-wrap">{message.text}</p>
+          ) : null}
+        </div>
+        {message.unread ? (
+          <span
+            role="img"
+            aria-label="Unread"
+            className="mb-2 size-2 shrink-0 rounded-full bg-(--label)"
+          />
+        ) : null}
+        <time
+          dateTime={message.receivedAt}
+          className="mb-1 shrink-0 text-xs text-muted-foreground tabular-nums"
+        >
+          {TIME_FORMAT.format(new Date(message.receivedAt))}
+        </time>
+      </div>
+    </li>
+  );
 }
 
 function EnvironmentBadge({ channel }: { channel: DesktopInboxChannel }) {
@@ -285,81 +347,61 @@ export function InboxPage({ search }: { search: InboxSearch }) {
               {groups.map((group) => {
                 const channel = channelById.get(group.channelId);
                 if (!channel) return null;
-                const first = group.messages[0]!;
+                const last = group.messages.at(-1)!;
+                const name = group.conversation ?? "Chat";
                 return (
                   <li
                     key={group.key}
                     style={{ "--label": channel.color } as CSSProperties}
-                    className="flex flex-col gap-2 rounded-lg border border-l-4 border-l-(--label) bg-(--label)/5 px-4 py-3"
+                    className="flex flex-col gap-3 rounded-xl border border-l-4 border-l-(--label) bg-card px-4 py-3 shadow-xs"
                   >
                     {conversation === null ? (
-                      <div className="flex min-w-0 items-center gap-2">
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        <span
+                          aria-hidden
+                          className="flex size-7 shrink-0 items-center justify-center rounded-full bg-(--label)/15 text-xs font-semibold text-(--label)"
+                        >
+                          {name.replace(/^#/, "").trim().charAt(0).toUpperCase()}
+                        </span>
                         {group.conversationId !== null ? (
                           <Link
                             to="/inbox"
                             search={{ channel: group.channelId, chat: group.conversationId }}
                             className="min-w-0 truncate text-sm font-semibold underline-offset-2 hover:underline"
                           >
-                            {group.conversation ?? "Chat"}
+                            {name}
                           </Link>
                         ) : (
-                          <span className="min-w-0 truncate text-sm font-semibold">
-                            {group.conversation}
-                          </span>
+                          <span className="min-w-0 truncate text-sm font-semibold">{name}</span>
                         )}
                         <span className="flex-1" />
                         <EnvironmentBadge channel={channel} />
                         <time
-                          dateTime={first.receivedAt}
+                          dateTime={last.receivedAt}
                           className="shrink-0 text-xs text-muted-foreground tabular-nums"
                         >
-                          {DAY_TIME_FORMAT.format(new Date(first.receivedAt))}
+                          {DAY_FORMAT.format(new Date(last.receivedAt))}
                         </time>
                       </div>
                     ) : null}
                     <ul className="m-0 flex list-none flex-col gap-1 p-0">
                       {group.messages.map((message, index) => {
-                        const sameSender = group.messages[index - 1]?.sender === message.sender;
+                        const previous = group.messages[index - 1];
+                        const newDay = previous
+                          ? dayOf(previous) !== dayOf(message)
+                          : conversation !== null;
                         return (
-                          <li key={message.id} className="flex min-w-0 items-baseline gap-2">
-                            <div className="min-w-0 flex-1">
-                              {sameSender ? null : (
-                                <div
-                                  className={cn(
-                                    "text-xs font-medium text-muted-foreground",
-                                    index > 0 && "mt-1.5",
-                                  )}
-                                >
-                                  {message.sender ?? "Unknown"}
-                                </div>
-                              )}
-                              <p
-                                className={cn(
-                                  "m-0 text-sm wrap-break-word whitespace-pre-wrap",
-                                  message.unread
-                                    ? "font-medium text-foreground"
-                                    : "text-foreground/80",
-                                )}
-                              >
-                                {message.text}
-                              </p>
-                            </div>
-                            {message.unread ? (
-                              <span
-                                role="img"
-                                aria-label="Unread"
-                                className="size-2 shrink-0 self-center rounded-full bg-(--label)"
-                              />
+                          <Fragment key={message.id}>
+                            {newDay ? (
+                              <li className="my-1 text-center text-xs text-muted-foreground">
+                                {DAY_FORMAT.format(new Date(message.receivedAt))}
+                              </li>
                             ) : null}
-                            <time
-                              dateTime={message.receivedAt}
-                              className="shrink-0 text-xs text-muted-foreground tabular-nums"
-                            >
-                              {(conversation === null ? TIME_FORMAT : DAY_TIME_FORMAT).format(
-                                new Date(message.receivedAt),
-                              )}
-                            </time>
-                          </li>
+                            <MessageBubble
+                              message={message}
+                              showSender={newDay || previous?.sender !== message.sender}
+                            />
+                          </Fragment>
                         );
                       })}
                     </ul>

@@ -77,6 +77,7 @@ const SAMPLE_INBOX: ReadonlyArray<DesktopInboxMessage> = Array.from(
     ...SAMPLE_MESSAGES[index % SAMPLE_MESSAGES.length]!,
     id: `sample:${index}`,
     conversationId: SAMPLE_MESSAGES[index % SAMPLE_MESSAGES.length]!.conversation,
+    media: null,
     receivedAt: new Date(NEWEST_RECEIVED_AT - index * MESSAGE_INTERVAL_MS).toISOString(),
     unread: index < UNREAD_COUNT,
   }),

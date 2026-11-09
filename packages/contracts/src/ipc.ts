@@ -358,6 +358,10 @@ export const DesktopInboxMessageSchema = Schema.Struct({
   /** The channel's own id for the chat; lets a page be limited to that chat. */
   conversationId: Schema.NullOr(Schema.String),
   text: Schema.String,
+  /** What the message carries besides text; `image` is a small preview as a data URL. */
+  media: Schema.NullOr(
+    Schema.Struct({ label: Schema.String, image: Schema.NullOr(Schema.String) }),
+  ),
   receivedAt: Schema.String,
   unread: Schema.Boolean,
 });
