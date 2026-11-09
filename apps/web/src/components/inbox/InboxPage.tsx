@@ -126,58 +126,142 @@ function dayOf(message: DesktopInboxMessage) {
   return new Date(message.receivedAt).toDateString();
 }
 
+const SENDER_TONES = [
+  { text: "text-sky-600 dark:text-sky-400", avatar: "bg-sky-500/15" },
+  { text: "text-emerald-600 dark:text-emerald-400", avatar: "bg-emerald-500/15" },
+  { text: "text-amber-600 dark:text-amber-400", avatar: "bg-amber-500/15" },
+  { text: "text-rose-600 dark:text-rose-400", avatar: "bg-rose-500/15" },
+  { text: "text-violet-600 dark:text-violet-400", avatar: "bg-violet-500/15" },
+  { text: "text-teal-600 dark:text-teal-400", avatar: "bg-teal-500/15" },
+  { text: "text-orange-600 dark:text-orange-400", avatar: "bg-orange-500/15" },
+  { text: "text-fuchsia-600 dark:text-fuchsia-400", avatar: "bg-fuchsia-500/15" },
+] as const;
+
+/** The same sender keeps the same colour everywhere. */
+function senderTone(sender: string) {
+  let hash = 0;
+  for (const char of sender) hash = (hash * 31 + char.codePointAt(0)!) % 9973;
+  return SENDER_TONES[hash % SENDER_TONES.length]!;
+}
+
+function initialOf(name: string) {
+  return (
+    [...name.replace(/^#/, "").trim()].find((char) => /[\p{L}\p{N}]/u.test(char)) ?? "?"
+  ).toUpperCase();
+}
+
+const URL_PATTERN = /(https?:\/\/[^\s<>]+)/;
+const EMOJI_ONLY = /^[\p{Extended_Pictographic}\p{Emoji_Component}\s]+$/u;
+
+function isEmojiOnly(text: string) {
+  return text.length <= 12 && EMOJI_ONLY.test(text) && /\p{Extended_Pictographic}/u.test(text);
+}
+
+function MessageText({ text }: { text: string }) {
+  return text.split(URL_PATTERN).map((part, index) =>
+    index % 2 === 1 ? (
+      <a
+        // oxlint-disable-next-line react/no-array-index-key -- parts of one immutable message text
+        key={index}
+        href={part}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-(--label) underline underline-offset-2 hover:no-underline"
+      >
+        {part}
+      </a>
+    ) : (
+      part
+    ),
+  );
+}
+
 function MessageBubble({
   message,
+  first,
+  last,
   showSender,
 }: {
   message: DesktopInboxMessage;
+  /** First and last message of a run by one sender. */
+  first: boolean;
+  last: boolean;
+  /** Chats with several other senders show who wrote each run. */
   showSender: boolean;
 }) {
   const own = message.sender === "You";
-  return (
-    <li className={cn("flex min-w-0 flex-col gap-0.5", own ? "items-end" : "items-start")}>
-      {showSender && !own ? (
-        <span className="px-1 text-xs font-medium text-muted-foreground">
-          {message.sender ?? "Unknown"}
-        </span>
+  const sender = message.sender ?? "Unknown";
+  const tone = senderTone(sender);
+  const emojiOnly = message.media === null && isEmojiOnly(message.text);
+  const meta = (
+    <span className="float-right mt-1.5 ml-3 flex items-center gap-1.5 text-xs leading-none text-muted-foreground tabular-nums">
+      {message.unread ? (
+        <span role="img" aria-label="Unread" className="size-1.5 rounded-full bg-(--label)" />
       ) : null}
-      <div className={cn("flex max-w-4/5 items-end gap-2", own && "flex-row-reverse")}>
+      <time dateTime={message.receivedAt}>{TIME_FORMAT.format(new Date(message.receivedAt))}</time>
+    </span>
+  );
+  return (
+    <li
+      className={cn(
+        "flex min-w-0 items-end gap-2",
+        own && "flex-row-reverse",
+        first ? "mt-2.5 first:mt-0" : "mt-0.5",
+      )}
+    >
+      {showSender && !own ? (
+        last ? (
+          <span
+            aria-hidden
+            className={cn(
+              "flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+              tone.avatar,
+              tone.text,
+            )}
+          >
+            {initialOf(sender)}
+          </span>
+        ) : (
+          <span aria-hidden className="w-7 shrink-0" />
+        )
+      ) : null}
+      <div
+        className={cn(
+          "flex max-w-4/5 min-w-0 flex-col overflow-hidden rounded-2xl text-sm",
+          emojiOnly ? null : own ? "bg-(--label)/15" : "bg-muted",
+          own ? !first && "rounded-tr-md" : !first && "rounded-tl-md",
+          own ? !last && "rounded-br-md" : !last && "rounded-bl-md",
+        )}
+      >
+        {showSender && !own && first && !emojiOnly ? (
+          <span className={cn("truncate px-3 pt-1.5 text-xs font-semibold", tone.text)}>
+            {sender}
+          </span>
+        ) : null}
+        {message.media?.image ? (
+          <img
+            src={message.media.image}
+            alt={message.media.label}
+            className="m-1 max-h-72 max-w-full self-start rounded-xl object-contain"
+          />
+        ) : message.media ? (
+          <span className="flex items-center gap-2 px-3 pt-2 text-muted-foreground">
+            <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-background">
+              <PaperclipIcon aria-hidden className="size-3.5" />
+            </span>
+            <span className="min-w-0 truncate">{message.media.label}</span>
+          </span>
+        ) : null}
         <div
           className={cn(
-            "flex min-w-0 flex-col gap-1.5 rounded-2xl px-3 py-1.5 text-sm",
-            own ? "rounded-br-md bg-(--label)/15" : "rounded-bl-md bg-muted",
+            "flow-root wrap-break-word whitespace-pre-wrap",
+            emojiOnly ? "text-4xl" : "px-3 py-1.5",
             message.unread && "font-medium",
           )}
         >
-          {message.media?.image ? (
-            <img
-              src={message.media.image}
-              alt={message.media.label}
-              className="h-40 max-w-full rounded-lg object-cover"
-            />
-          ) : message.media ? (
-            <span className="flex items-center gap-1.5 text-muted-foreground italic">
-              <PaperclipIcon aria-hidden className="size-3.5 shrink-0" />
-              {message.media.label}
-            </span>
-          ) : null}
-          {message.text ? (
-            <p className="m-0 wrap-break-word whitespace-pre-wrap">{message.text}</p>
-          ) : null}
+          <MessageText text={message.text} />
+          {meta}
         </div>
-        {message.unread ? (
-          <span
-            role="img"
-            aria-label="Unread"
-            className="mb-2 size-2 shrink-0 rounded-full bg-(--label)"
-          />
-        ) : null}
-        <time
-          dateTime={message.receivedAt}
-          className="mb-1 shrink-0 text-xs text-muted-foreground tabular-nums"
-        >
-          {TIME_FORMAT.format(new Date(message.receivedAt))}
-        </time>
       </div>
     </li>
   );
@@ -349,6 +433,9 @@ export function InboxPage({ search }: { search: InboxSearch }) {
                 if (!channel) return null;
                 const last = group.messages.at(-1)!;
                 const name = group.conversation ?? "Chat";
+                const showSenders = group.messages.some(
+                  (message) => message.sender !== "You" && message.sender !== name,
+                );
                 return (
                   <li
                     key={group.key}
@@ -361,7 +448,7 @@ export function InboxPage({ search }: { search: InboxSearch }) {
                           aria-hidden
                           className="flex size-7 shrink-0 items-center justify-center rounded-full bg-(--label)/15 text-xs font-semibold text-(--label)"
                         >
-                          {name.replace(/^#/, "").trim().charAt(0).toUpperCase()}
+                          {initialOf(name)}
                         </span>
                         {group.conversationId !== null ? (
                           <Link
@@ -384,22 +471,29 @@ export function InboxPage({ search }: { search: InboxSearch }) {
                         </time>
                       </div>
                     ) : null}
-                    <ul className="m-0 flex list-none flex-col gap-1 p-0">
+                    <ul className="m-0 flex list-none flex-col p-0">
                       {group.messages.map((message, index) => {
                         const previous = group.messages[index - 1];
+                        const next = group.messages[index + 1];
                         const newDay = previous
                           ? dayOf(previous) !== dayOf(message)
                           : conversation !== null;
                         return (
                           <Fragment key={message.id}>
                             {newDay ? (
-                              <li className="my-1 text-center text-xs text-muted-foreground">
+                              <li className="my-3 flex items-center gap-3 text-xs text-muted-foreground first:mt-0">
+                                <span aria-hidden className="h-px flex-1 bg-border" />
                                 {DAY_FORMAT.format(new Date(message.receivedAt))}
+                                <span aria-hidden className="h-px flex-1 bg-border" />
                               </li>
                             ) : null}
                             <MessageBubble
                               message={message}
-                              showSender={newDay || previous?.sender !== message.sender}
+                              first={newDay || previous?.sender !== message.sender}
+                              last={
+                                next?.sender !== message.sender || dayOf(next) !== dayOf(message)
+                              }
+                              showSender={showSenders}
                             />
                           </Fragment>
                         );
