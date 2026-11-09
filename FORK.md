@@ -86,8 +86,8 @@ Soubor se necommituje; po novém checkoutu jej vytvoř znovu před sestavením.
 Inbox čte zprávy přes desktopovou část Garden podle `~/.garden/inbox/channels.json`.
 Každý kanál má `id`, `label`, `channel` (`telegram`, `zulip`), `color` a `command`;
 Garden k příkazu přidá `--limit N` a pro starší stránky `--before <ISO čas>` a čeká
-JSON pole zpráv od nejnovější (`id`, `sender`, `conversation`, `text`, `receivedAt`,
-`unread`). Bez konfigurace a v prohlížeči Inbox ukazuje ukázková data. Skript pro
+JSON pole zpráv od nejnovější (`id`, `sender`, `conversation`, `conversationId`,
+`text`, `receivedAt`, `unread`). Pro zobrazení jednoho chatu přidá `--chat=<conversationId>`. Bez konfigurace a v prohlížeči Inbox ukazuje ukázková data. Skript pro
 Telegram, jeho přihlašovací údaje a session leží mimo repozitář v
 `/Users/petrbrazdil/Repos/garden/telegram`.
 

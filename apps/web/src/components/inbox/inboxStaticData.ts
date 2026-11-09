@@ -2,6 +2,7 @@ import type {
   DesktopInboxChannel,
   DesktopInboxMessage,
   DesktopInboxPage,
+  DesktopInboxPageInput,
 } from "@t3tools/contracts";
 
 // Shown when no channel is configured on this device (and in the browser, which has no bridge).
@@ -75,15 +76,24 @@ const SAMPLE_INBOX: ReadonlyArray<DesktopInboxMessage> = Array.from(
   (_, index) => ({
     ...SAMPLE_MESSAGES[index % SAMPLE_MESSAGES.length]!,
     id: `sample:${index}`,
+    conversationId: SAMPLE_MESSAGES[index % SAMPLE_MESSAGES.length]!.conversation,
     receivedAt: new Date(NEWEST_RECEIVED_AT - index * MESSAGE_INTERVAL_MS).toISOString(),
     unread: index < UNREAD_COUNT,
   }),
 );
 
-export function sampleInboxPage(limit: number, before: string | undefined): DesktopInboxPage {
-  const older = before
-    ? SAMPLE_INBOX.filter((message) => message.receivedAt < before)
-    : SAMPLE_INBOX;
+export function sampleInboxPage({
+  limit,
+  before,
+  conversation,
+}: DesktopInboxPageInput): DesktopInboxPage {
+  const older = SAMPLE_INBOX.filter(
+    (message) =>
+      (!before || message.receivedAt < before) &&
+      (!conversation ||
+        (message.channelId === conversation.channelId &&
+          message.conversationId === conversation.conversationId)),
+  );
   return {
     channels: SAMPLE_CHANNELS,
     messages: older.slice(0, limit),

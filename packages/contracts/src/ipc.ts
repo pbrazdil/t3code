@@ -355,6 +355,8 @@ export const DesktopInboxMessageSchema = Schema.Struct({
   channelId: Schema.String,
   sender: Schema.NullOr(Schema.String),
   conversation: Schema.NullOr(Schema.String),
+  /** The channel's own id for the chat; lets a page be limited to that chat. */
+  conversationId: Schema.NullOr(Schema.String),
   text: Schema.String,
   receivedAt: Schema.String,
   unread: Schema.Boolean,
@@ -365,6 +367,10 @@ export const DesktopInboxPageInputSchema = Schema.Struct({
   limit: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 200 })),
   /** ISO time; only messages older than it are returned. */
   before: Schema.optionalKey(Schema.String),
+  /** Limits the page to one chat of one channel. */
+  conversation: Schema.optionalKey(
+    Schema.Struct({ channelId: Schema.String, conversationId: Schema.String }),
+  ),
 });
 export type DesktopInboxPageInput = typeof DesktopInboxPageInputSchema.Type;
 

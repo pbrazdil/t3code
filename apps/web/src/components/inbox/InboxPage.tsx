@@ -2,7 +2,9 @@ import type {
   DesktopInboxChannel,
   DesktopInboxMessage,
   DesktopInboxPage,
+  DesktopInboxPageInput,
 } from "@t3tools/contracts";
+import { Link } from "@tanstack/react-router";
 import { MessagesSquareIcon, SendIcon } from "lucide-react";
 import { useEffect, useEffectEvent, useRef, useState, type CSSProperties } from "react";
 
@@ -11,7 +13,11 @@ import { cn } from "~/lib/utils";
 import { workspaceAreaProps } from "../../lib/workspaceFocus";
 import { Badge } from "../ui/badge";
 import { SidebarInset } from "../ui/sidebar";
-import { WorkspaceBreadcrumb, WorkspaceBreadcrumbItem } from "../WorkspaceBreadcrumb";
+import {
+  WorkspaceBreadcrumb,
+  WorkspaceBreadcrumbItem,
+  WorkspaceBreadcrumbSeparator,
+} from "../WorkspaceBreadcrumb";
 import { WorkspacePageContainer } from "../WorkspacePageContainer";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
 import { sampleInboxPage } from "./inboxStaticData";
@@ -46,14 +52,16 @@ const EMPTY_INBOX: InboxState = {
   sample: false,
 };
 
-async function loadInboxPage(before: string | undefined) {
-  const live = await window.desktopBridge?.inbox.loadPage({
-    limit: PAGE_SIZE,
-    ...(before ? { before } : {}),
-  });
+export interface InboxSearch {
+  readonly channel?: string;
+  readonly chat?: string;
+}
+
+async function loadInboxPage(input: DesktopInboxPageInput) {
+  const live = await window.desktopBridge?.inbox.loadPage(input);
   return live && live.channels.length > 0
     ? { page: live, sample: false }
-    : { page: sampleInboxPage(PAGE_SIZE, before), sample: true };
+    : { page: sampleInboxPage(input), sample: true };
 }
 
 function EnvironmentBadge({ channel }: { channel: DesktopInboxChannel }) {
@@ -66,7 +74,11 @@ function EnvironmentBadge({ channel }: { channel: DesktopInboxChannel }) {
   );
 }
 
-export function InboxPage() {
+export function InboxPage({ search }: { search: InboxSearch }) {
+  const conversation =
+    search.channel !== undefined && search.chat !== undefined
+      ? { channelId: search.channel, conversationId: search.chat }
+      : null;
   const [inbox, setInbox] = useState(EMPTY_INBOX);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const sentinelRef = useRef<HTMLLIElement | null>(null);
@@ -82,9 +94,11 @@ export function InboxPage() {
     const request = requestRef.current;
     if (request.loading || request.done) return;
     request.loading = true;
-    const loaded = await loadInboxPage(request.before).catch((error: unknown) =>
-      error instanceof Error ? error.message : String(error),
-    );
+    const loaded = await loadInboxPage({
+      limit: PAGE_SIZE,
+      ...(request.before ? { before: request.before } : {}),
+      ...(conversation ? { conversation } : {}),
+    }).catch((error: unknown) => (error instanceof Error ? error.message : String(error)));
     request.loading = false;
     if (typeof loaded === "string") {
       request.done = true;
@@ -136,6 +150,7 @@ export function InboxPage() {
   }, []);
 
   const channelById = new Map(inbox.channels.map((channel) => [channel.id, channel]));
+  const conversationName = conversation ? (inbox.messages[0]?.conversation ?? "Chat") : null;
 
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none">
@@ -145,9 +160,23 @@ export function InboxPage() {
       >
         <WorkspacePageHeader electron={isElectron} className="bg-background">
           <WorkspaceBreadcrumb ariaLabel="Inbox breadcrumb">
-            <WorkspaceBreadcrumbItem current>
-              <h1 className="truncate">Inbox</h1>
-            </WorkspaceBreadcrumbItem>
+            {conversationName === null ? (
+              <WorkspaceBreadcrumbItem current>
+                <h1 className="truncate">Inbox</h1>
+              </WorkspaceBreadcrumbItem>
+            ) : (
+              <>
+                <WorkspaceBreadcrumbItem>
+                  <Link to="/inbox" className="text-muted-foreground hover:text-foreground">
+                    Inbox
+                  </Link>
+                </WorkspaceBreadcrumbItem>
+                <WorkspaceBreadcrumbSeparator />
+                <WorkspaceBreadcrumbItem current className="min-w-0">
+                  <h1 className="truncate">{conversationName}</h1>
+                </WorkspaceBreadcrumbItem>
+              </>
+            )}
           </WorkspaceBreadcrumb>
         </WorkspacePageHeader>
 
@@ -197,9 +226,20 @@ export function InboxPage() {
                       >
                         {message.sender ?? "Unknown"}
                       </span>
-                      <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-                        {message.conversation}
-                      </span>
+                      {conversation === null && message.conversationId !== null ? (
+                        <Link
+                          to="/inbox"
+                          search={{ channel: message.channelId, chat: message.conversationId }}
+                          className="min-w-0 truncate text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                        >
+                          {message.conversation ?? "Chat"}
+                        </Link>
+                      ) : (
+                        <span className="min-w-0 truncate text-xs text-muted-foreground">
+                          {message.conversation}
+                        </span>
+                      )}
+                      <span className="flex-1" />
                       <EnvironmentBadge channel={channel} />
                       <time
                         dateTime={message.receivedAt}

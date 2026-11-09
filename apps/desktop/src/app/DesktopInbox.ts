@@ -2,6 +2,7 @@ import type {
   DesktopInboxChannel,
   DesktopInboxMessage,
   DesktopInboxPage,
+  DesktopInboxPageInput,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -22,7 +23,7 @@ const { logWarning } = makeComponentLogger("desktop-inbox");
 const CHANNEL_TIMEOUT = "60 seconds";
 
 // `<home>/inbox/channels.json`. Each channel's `command` gets `--limit N` and, for older pages,
-// `--before <ISO time>` appended, and prints a JSON array of messages, newest first.
+// `--before <ISO time>` and, for a single chat, `--chat=<conversationId>` appended, and prints a JSON array of messages, newest first.
 const ChannelConfig = Schema.Struct({
   id: Schema.String,
   label: Schema.String,
@@ -36,6 +37,7 @@ const ChannelMessage = Schema.Struct({
   id: Schema.String,
   sender: Schema.NullOr(Schema.String),
   conversation: Schema.NullOr(Schema.String),
+  conversationId: Schema.optional(Schema.NullOr(Schema.String)),
   text: Schema.String,
   receivedAt: Schema.String,
   unread: Schema.Boolean,
@@ -48,10 +50,7 @@ export class DesktopInbox extends Context.Service<
   DesktopInbox,
   {
     /** One page across all configured channels, newest first. A failing channel is reported, not fatal. */
-    readonly loadPage: (input: {
-      readonly limit: number;
-      readonly before?: string | undefined;
-    }) => Effect.Effect<DesktopInboxPage>;
+    readonly loadPage: (input: DesktopInboxPageInput) => Effect.Effect<DesktopInboxPage>;
   }
 >()("@t3tools/desktop/app/DesktopInbox") {}
 
@@ -92,15 +91,22 @@ const make = Effect.gen(function* () {
       ...row,
       id: `${config.id}:${row.id}`,
       channelId: config.id,
+      conversationId: row.conversationId ?? null,
     }));
   });
 
   const loadPage: DesktopInbox["Service"]["loadPage"] = Effect.fn("desktop.inbox.loadPage")(
-    function* ({ limit, before }) {
+    function* ({ limit, before, conversation }) {
       const configs = yield* readConfig;
-      const args = ["--limit", String(limit), ...(before ? ["--before", before] : [])];
+      const args = [
+        "--limit",
+        String(limit),
+        ...(before ? ["--before", before] : []),
+        // One argument, so an id with a leading minus is not read as an option.
+        ...(conversation ? [`--chat=${conversation.conversationId}`] : []),
+      ];
       const results = yield* Effect.forEach(
-        configs,
+        conversation ? configs.filter((config) => config.id === conversation.channelId) : configs,
         (config) =>
           Effect.scoped(readChannel(config, args)).pipe(
             Effect.timeoutOption(CHANNEL_TIMEOUT),
