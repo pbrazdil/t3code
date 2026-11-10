@@ -5,7 +5,14 @@ import type {
   DesktopInboxTask,
 } from "@t3tools/contracts";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { CheckCheckIcon, CheckIcon, ListFilterIcon, PaperclipIcon, StarIcon } from "lucide-react";
+import {
+  ArrowDownIcon,
+  CheckCheckIcon,
+  CheckIcon,
+  ListFilterIcon,
+  PaperclipIcon,
+  StarIcon,
+} from "lucide-react";
 import {
   Fragment,
   useEffect,
@@ -17,6 +24,7 @@ import {
 } from "react";
 
 import { isElectron } from "~/env";
+import { observeResize } from "~/lib/observeResize";
 import { cn } from "~/lib/utils";
 import { workspaceAreaProps } from "../../lib/workspaceFocus";
 import { ExpandedImageDialogHost, openExpandedImagePreview } from "../chat/ExpandedImageDialog";
@@ -458,10 +466,26 @@ export function InboxPage({ search }: { search: InboxSearch }) {
     inboxScroll.get(scrollKey) ?? "bottom",
   );
 
+  // At the newest end the list follows content that grows late, such as loading pictures.
+  const stuckRef = useRef(true);
+  const [atBottom, setAtBottom] = useState(true);
+  const contentRef = useRef<HTMLDivElement | null>(null);
+
+  const scrollToBottom = () => {
+    const scroller = scrollRef.current;
+    if (!scroller) return;
+    stuckRef.current = true;
+    scroller.scrollTop = scroller.scrollHeight;
+  };
+
   const rememberScroll = () => {
     const scroller = scrollRef.current;
     if (!scroller) return;
-    if (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < STICK_TO_BOTTOM_PX) {
+    const stuck =
+      scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < STICK_TO_BOTTOM_PX;
+    stuckRef.current = stuck;
+    setAtBottom(stuck);
+    if (stuck) {
       inboxScroll.delete(scrollKey);
       return;
     }
@@ -552,6 +576,7 @@ export function InboxPage({ search }: { search: InboxSearch }) {
     const anchor = anchorRef.current;
     if (!scroller || anchor === null) return;
     anchorRef.current = null;
+    stuckRef.current = anchor === "bottom";
     if (anchor === "bottom") {
       scroller.scrollTop = scroller.scrollHeight;
     } else if ("group" in anchor) {
@@ -569,7 +594,7 @@ export function InboxPage({ search }: { search: InboxSearch }) {
     }
   });
 
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- IntersectionObserver on the top-of-list sentinel loads older pages, a timer loads new messages; a cached list also refreshes its newest page once
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- IntersectionObserver on the top-of-list sentinel loads older pages, a timer loads new messages, a ResizeObserver keeps the newest end in view; a cached list also refreshes its newest page once
   useEffect(() => {
     const sentinel = sentinelRef.current;
     if (!sentinel) return;
@@ -589,7 +614,14 @@ export function InboxPage({ search }: { search: InboxSearch }) {
     const refresh = setInterval(() => {
       if (!document.hidden) void load("newest");
     }, INBOX_REFRESH_MS);
+    const stopFollowing = contentRef.current
+      ? observeResize(contentRef.current, () => {
+          const scroller = scrollRef.current;
+          if (scroller && stuckRef.current) scroller.scrollTop = scroller.scrollHeight;
+        })
+      : undefined;
     return () => {
+      stopFollowing?.();
       clearInterval(refresh);
       observer.disconnect();
       observerRef.current = null;
@@ -625,7 +657,8 @@ export function InboxPage({ search }: { search: InboxSearch }) {
 
   const showFilter = (next: string) => {
     const nextFilter = next === "all" || next === "starred" ? next : undefined;
-    anchorRef.current = inboxScroll.get(`${cacheKey}|${nextFilter ?? "unread"}`) ?? "bottom";
+    inboxScroll.delete(`${cacheKey}|${nextFilter ?? "unread"}`);
+    anchorRef.current = "bottom";
     setSearchPaused(false);
     void navigate({
       to: "/inbox",
@@ -726,7 +759,7 @@ export function InboxPage({ search }: { search: InboxSearch }) {
           style={{ containerType: "size" }}
         >
           <div className="flex min-h-full">
-            <div className="flex min-w-0 flex-1 flex-col">
+            <div ref={contentRef} className="flex min-w-0 flex-1 flex-col">
               <WorkspacePageContainer className="max-w-3xl flex-1 justify-end gap-4">
                 <ul className="m-0 flex list-none flex-col gap-2 p-0">
                   <li ref={sentinelRef} className="py-4 text-center text-xs text-muted-foreground">
@@ -862,6 +895,21 @@ export function InboxPage({ search }: { search: InboxSearch }) {
                   </p>
                 ))}
               </WorkspacePageContainer>
+              {atBottom ? null : (
+                // No height of its own: the button rises above the line it sticks to.
+                <div className="pointer-events-none sticky bottom-6 flex h-0 items-end justify-center">
+                  <span className="pointer-events-auto">
+                    <Button
+                      variant="outline"
+                      size="icon-sm"
+                      aria-label="Scroll to newest messages"
+                      onClick={scrollToBottom}
+                    >
+                      <ArrowDownIcon aria-hidden />
+                    </Button>
+                  </span>
+                </div>
+              )}
             </div>
             <aside
               className="sticky top-0 hidden w-1/2 shrink-0 flex-col gap-4 self-start overflow-y-auto border-l px-4 py-6 lg:flex"
