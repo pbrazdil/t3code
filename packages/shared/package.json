@@ -371,6 +371,10 @@
       "types": "./src/devHome.ts",
       "import": "./src/devHome.ts"
     },
+    "./inboxChannels": {
+      "types": "./src/inboxChannels.ts",
+      "import": "./src/inboxChannels.ts"
+    },
     "./devProxy": {
       "types": "./src/devProxy.ts",
       "import": "./src/devProxy.ts"
