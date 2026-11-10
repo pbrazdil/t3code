@@ -5,15 +5,7 @@ import type {
   DesktopInboxTask,
 } from "@t3tools/contracts";
 import { Link, useNavigate } from "@tanstack/react-router";
-import {
-  CheckCheckIcon,
-  CheckIcon,
-  ListFilterIcon,
-  MessagesSquareIcon,
-  PaperclipIcon,
-  SendIcon,
-  StarIcon,
-} from "lucide-react";
+import { CheckCheckIcon, CheckIcon, ListFilterIcon, PaperclipIcon, StarIcon } from "lucide-react";
 import {
   Fragment,
   useEffect,
@@ -46,6 +38,7 @@ import {
   loadInboxPage,
   publishNewestInboxMessages,
 } from "./inboxFeed";
+import { InboxEnvironmentIcon } from "./InboxEnvironmentIcon";
 import { InboxTasksWidget, MessageTaskMenu } from "./InboxTasks";
 import { useInboxTasks } from "./inboxTaskStore";
 import {
@@ -60,11 +53,6 @@ import {
 const STICK_TO_BOTTOM_PX = 80;
 const INBOX_OVERLAY_KEY = "inbox";
 const NO_TASKS: ReadonlyArray<DesktopInboxTask> = [];
-
-const CHANNEL_LABEL: Record<string, string> = {
-  telegram: "Telegram",
-  zulip: "Zulip",
-};
 
 const TIME_FORMAT = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" });
 
@@ -408,10 +396,8 @@ function EnvironmentFilter({
       >
         {channel === undefined ? (
           <ListFilterIcon className="size-4" />
-        ) : channel.channel === "telegram" ? (
-          <SendIcon className="size-4" style={{ color: channel.color }} />
         ) : (
-          <MessagesSquareIcon className="size-4" style={{ color: channel.color }} />
+          <InboxEnvironmentIcon channel={channel} />
         )}
       </MenuTrigger>
       <MenuPopup align="end">
@@ -426,7 +412,10 @@ function EnvironmentFilter({
           </MenuRadioItem>
           {channels.map((candidate) => (
             <MenuRadioItem key={candidate.id} value={candidate.id} closeOnClick>
-              {candidate.label} · {CHANNEL_LABEL[candidate.channel] ?? candidate.channel}
+              <span className="flex items-center gap-2">
+                <InboxEnvironmentIcon channel={candidate} />
+                {candidate.label}
+              </span>
             </MenuRadioItem>
           ))}
         </MenuRadioGroup>
@@ -436,10 +425,9 @@ function EnvironmentFilter({
 }
 
 function EnvironmentBadge({ channel }: { channel: DesktopInboxChannel }) {
-  const Icon = channel.channel === "telegram" ? SendIcon : MessagesSquareIcon;
   return (
     <Badge variant="label" style={{ "--label": channel.color } as CSSProperties}>
-      <Icon aria-hidden className="size-3" />
+      <InboxEnvironmentIcon channel={channel} className="size-3.5" />
       {channel.label}
     </Badge>
   );
@@ -678,7 +666,7 @@ export function InboxPage({ search }: { search: InboxSearch }) {
                     className="flex items-center gap-1.5 text-muted-foreground"
                     style={{ "--label": crumbChannel.color } as CSSProperties}
                   >
-                    <span aria-hidden className="size-2 shrink-0 rounded-full bg-(--label)" />
+                    <InboxEnvironmentIcon channel={crumbChannel} />
                     {crumbChannel.label}
                   </span>
                 </WorkspaceBreadcrumbItem>

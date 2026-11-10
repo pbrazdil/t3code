@@ -29,6 +29,7 @@ import {
   MenuTrigger,
 } from "../ui/menu";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
+import { InboxEnvironmentIcon } from "./InboxEnvironmentIcon";
 import {
   createInboxTask,
   deleteInboxTask,
@@ -337,7 +338,7 @@ export function InboxTasksWidget({
         >
           {shown.length > 1 ? (
             <h3 className="m-0 flex items-center gap-1.5 px-1 text-xs font-medium text-muted-foreground">
-              <span aria-hidden className="size-2 rounded-full bg-(--label)" />
+              <InboxEnvironmentIcon channel={channel} />
               {channel.label}
             </h3>
           ) : null}
