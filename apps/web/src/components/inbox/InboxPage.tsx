@@ -25,6 +25,7 @@ import {
 import { isElectron } from "~/env";
 import { cn } from "~/lib/utils";
 import { workspaceAreaProps } from "../../lib/workspaceFocus";
+import { ExpandedImageDialogHost, openExpandedImagePreview } from "../chat/ExpandedImageDialog";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { SidebarInset } from "../ui/sidebar";
@@ -51,6 +52,7 @@ import {
 } from "./inboxLocalState";
 
 const STICK_TO_BOTTOM_PX = 80;
+const INBOX_OVERLAY_KEY = "inbox";
 
 const CHANNEL_LABEL: Record<string, string> = {
   telegram: "Telegram",
@@ -314,11 +316,23 @@ function MessageBubble({
           </span>
         ) : null}
         {message.media?.image ? (
-          <img
-            src={message.media.image}
-            alt={message.media.label}
-            className="m-1 max-h-72 max-w-full self-start rounded-xl object-contain"
-          />
+          <button
+            type="button"
+            aria-label={`Enlarge ${message.media.label}`}
+            onClick={() =>
+              openExpandedImagePreview(INBOX_OVERLAY_KEY, {
+                images: [{ src: message.media!.image, name: message.media!.label }],
+                index: 0,
+              })
+            }
+            className="m-1 cursor-zoom-in self-start rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+          >
+            <img
+              src={message.media.image}
+              alt={message.media.label}
+              className="max-h-72 max-w-full rounded-xl object-contain"
+            />
+          </button>
         ) : message.media ? (
           <span className="flex items-center gap-2 px-3 pt-2 text-muted-foreground">
             <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-background">
@@ -778,6 +792,7 @@ export function InboxPage({ search }: { search: InboxSearch }) {
           </WorkspacePageContainer>
         </div>
       </div>
+      <ExpandedImageDialogHost threadKey={INBOX_OVERLAY_KEY} />
     </SidebarInset>
   );
 }
