@@ -45,6 +45,7 @@ import {
 import {
   isInboxMessageUnread,
   setInboxMessagesRead,
+  toggleInboxEnvironment,
   toggleInboxMessageStar,
   useInboxLocalState,
 } from "./inboxLocalState";
@@ -358,6 +359,23 @@ function MessageBubble({
   );
 }
 
+function EnvironmentToggle({ channel, hidden }: { channel: DesktopInboxChannel; hidden: boolean }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={!hidden}
+      aria-label={`Show ${channel.label}`}
+      onClick={() => toggleInboxEnvironment(channel.id)}
+      className={cn(
+        "cursor-pointer rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+        hidden && "opacity-40 grayscale",
+      )}
+    >
+      <EnvironmentBadge channel={channel} />
+    </button>
+  );
+}
+
 function EnvironmentBadge({ channel }: { channel: DesktopInboxChannel }) {
   const Icon = channel.channel === "telegram" ? SendIcon : MessagesSquareIcon;
   return (
@@ -412,6 +430,10 @@ export function InboxPage({ search }: { search: InboxSearch }) {
     }
   };
 
+  // A chat is opened on purpose, so hiding its environment only thins the overview.
+  const isShown = (message: DesktopInboxMessage) =>
+    conversation !== null || !local.hidden.has(message.channelId);
+
   const load = useEffectEvent(async (direction: "older" | "newest", requested = false) => {
     if (loadingRef.current) return;
     if (direction === "older") {
@@ -464,7 +486,8 @@ export function InboxPage({ search }: { search: InboxSearch }) {
       setSearchPaused(
         filter === "unread" &&
           !messages.some(
-            (message) => !known.has(message.id) && isInboxMessageUnread(local, message),
+            (message) =>
+              !known.has(message.id) && isShown(message) && isInboxMessageUnread(local, message),
           ),
       );
     }
@@ -531,16 +554,18 @@ export function InboxPage({ search }: { search: InboxSearch }) {
   const shown =
     filter === "starred"
       ? [...local.starred.values()]
-          .filter(
-            (message) =>
-              conversation === null ||
-              (message.channelId === conversation.channelId &&
-                message.conversationId === conversation.conversationId),
+          .filter((message) =>
+            conversation === null
+              ? !local.hidden.has(message.channelId)
+              : message.channelId === conversation.channelId &&
+                message.conversationId === conversation.conversationId,
           )
           .toSorted((a, b) => a.receivedAt.localeCompare(b.receivedAt))
       : filter === "unread"
-        ? inbox.messages.filter((message) => isInboxMessageUnread(local, message))
-        : inbox.messages;
+        ? inbox.messages.filter(
+            (message) => isShown(message) && isInboxMessageUnread(local, message),
+          )
+        : inbox.messages.filter(isShown);
   const groups = groupByConversation(shown);
 
   const showFilter = (next: string) => {
@@ -601,9 +626,17 @@ export function InboxPage({ search }: { search: InboxSearch }) {
             {inbox.sample ? (
               <span className="text-xs text-muted-foreground">Sample data</span>
             ) : null}
-            {inbox.channels.map((channel) => (
-              <EnvironmentBadge key={channel.id} channel={channel} />
-            ))}
+            {inbox.channels.map((channel) =>
+              conversation === null ? (
+                <EnvironmentToggle
+                  key={channel.id}
+                  channel={channel}
+                  hidden={local.hidden.has(channel.id)}
+                />
+              ) : (
+                <EnvironmentBadge key={channel.id} channel={channel} />
+              ),
+            )}
           </div>
         </WorkspacePageHeader>
 

@@ -11,6 +11,8 @@ interface InboxLocalState {
   readonly unread: ReadonlySet<string>;
   /** Whole messages, so the starred view needs no channel to find them again. */
   readonly starred: ReadonlyMap<string, DesktopInboxMessage>;
+  /** Channel ids of environments left out of the Inbox and its unread count. */
+  readonly hidden: ReadonlySet<string>;
 }
 
 interface StoredState {
@@ -18,6 +20,7 @@ interface StoredState {
   readonly read: ReadonlyArray<string>;
   readonly unread: ReadonlyArray<string>;
   readonly starred: ReadonlyArray<DesktopInboxMessage>;
+  readonly hidden?: ReadonlyArray<string>;
 }
 
 function readStored(): InboxLocalState {
@@ -29,6 +32,7 @@ function readStored(): InboxLocalState {
         read: new Set(stored.read),
         unread: new Set(stored.unread),
         starred: new Map(stored.starred.map((message) => [message.id, message])),
+        hidden: new Set(stored.hidden),
       };
     }
   } catch {
@@ -39,6 +43,7 @@ function readStored(): InboxLocalState {
     read: new Set(),
     unread: new Set(),
     starred: new Map(),
+    hidden: new Set(),
   };
 }
 
@@ -52,6 +57,7 @@ function serialize(next: InboxLocalState, withImages: boolean) {
         ? message
         : { ...message, media: { ...message.media, image: null } },
     ),
+    hidden: [...next.hidden],
   };
   return JSON.stringify(stored);
 }
@@ -102,4 +108,10 @@ export function toggleInboxMessageStar(message: DesktopInboxMessage) {
   const starred = new Map(state.starred);
   if (!starred.delete(message.id)) starred.set(message.id, message);
   commit({ ...state, starred });
+}
+
+export function toggleInboxEnvironment(channelId: string) {
+  const hidden = new Set(state.hidden);
+  if (!hidden.delete(channelId)) hidden.add(channelId);
+  commit({ ...state, hidden });
 }

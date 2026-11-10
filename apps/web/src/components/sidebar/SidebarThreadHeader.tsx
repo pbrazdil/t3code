@@ -18,15 +18,16 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 function InboxUnreadCount() {
   const newest = useNewestInboxMessages();
   const local = useInboxLocalState();
-  const count = newest?.filter((message) => isInboxMessageUnread(local, message)).length ?? 0;
-  if (!newest || count === 0) return null;
+  const shown = newest?.filter((message) => !local.hidden.has(message.channelId));
+  const count = shown?.filter((message) => isInboxMessageUnread(local, message)).length ?? 0;
+  if (!shown || count === 0) return null;
   return (
     <span
       aria-label={`${count} unread`}
       className="ml-auto rounded-full bg-primary/15 px-1.5 text-xs font-medium text-primary tabular-nums"
     >
       {count}
-      {count === newest.length ? "+" : ""}
+      {count === shown.length ? "+" : ""}
     </span>
   );
 }
