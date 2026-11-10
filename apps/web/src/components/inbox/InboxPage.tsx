@@ -44,7 +44,13 @@ import {
 } from "../WorkspaceBreadcrumb";
 import { WorkspacePageContainer } from "../WorkspacePageContainer";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
-import { INBOX_PAGE_SIZE, INBOX_REFRESH_MS, loadInboxPage, useInboxUnreadLabel } from "./inboxFeed";
+import {
+  INBOX_PAGE_SIZE,
+  INBOX_REFRESH_MS,
+  loadInboxPage,
+  useInboxUnreadLabel,
+  useNewestInboxMessages,
+} from "./inboxFeed";
 import { InboxEnvironmentIcon } from "./InboxEnvironmentIcon";
 import { InboxTasksWidget, MessageTaskMenu } from "./InboxTasks";
 import { useInboxTasks } from "./inboxTaskStore";
@@ -689,6 +695,7 @@ export function InboxPage({ search }: { search: InboxSearch }) {
     };
   }, []);
 
+  const newestMessages = useNewestInboxMessages();
   const { tasks } = useInboxTasks();
   const tasksByEnvironment = new Map<string, Array<DesktopInboxTask>>();
   for (const task of tasks) {
@@ -710,9 +717,11 @@ export function InboxPage({ search }: { search: InboxSearch }) {
           )
           .toSorted((a, b) => a.receivedAt.localeCompare(b.receivedAt))
       : filter === "unread"
-        ? inbox.messages.filter(
-            (message) => isShown(message) && isInboxMessageUnread(local, message),
-          )
+        ? // The feed reaches a quiet environment's unread messages behind a busy one's page.
+          (conversation === null && !inbox.sample
+            ? mergeMessages(inbox.messages, newestMessages ?? [])
+            : inbox.messages
+          ).filter((message) => isShown(message) && isInboxMessageUnread(local, message))
         : inbox.messages.filter(isShown);
   const groups = groupByConversation(shown);
 

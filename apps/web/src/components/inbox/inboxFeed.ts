@@ -60,6 +60,11 @@ function subscribe(listener: () => void) {
   };
 }
 
+/** The newest page of every channel, or null before the first load. */
+export function useNewestInboxMessages() {
+  return useSyncExternalStore(subscribe, () => newest);
+}
+
 /**
  * Counts unread messages of one environment, or of all for `null`: "12", or "50+" when the
  * loaded page ends in an unread message and older ones may be unread too.
