@@ -11,8 +11,8 @@ interface InboxLocalState {
   readonly unread: ReadonlySet<string>;
   /** Whole messages, so the starred view needs no channel to find them again. */
   readonly starred: ReadonlyMap<string, DesktopInboxMessage>;
-  /** Channel ids of environments left out of the Inbox and its unread count. */
-  readonly hidden: ReadonlySet<string>;
+  /** Channel id of the only environment shown and counted; null shows all. */
+  readonly environment: string | null;
 }
 
 interface StoredState {
@@ -20,7 +20,7 @@ interface StoredState {
   readonly read: ReadonlyArray<string>;
   readonly unread: ReadonlyArray<string>;
   readonly starred: ReadonlyArray<DesktopInboxMessage>;
-  readonly hidden?: ReadonlyArray<string>;
+  readonly environment?: string | null;
 }
 
 function readStored(): InboxLocalState {
@@ -32,7 +32,7 @@ function readStored(): InboxLocalState {
         read: new Set(stored.read),
         unread: new Set(stored.unread),
         starred: new Map(stored.starred.map((message) => [message.id, message])),
-        hidden: new Set(stored.hidden),
+        environment: stored.environment ?? null,
       };
     }
   } catch {
@@ -43,7 +43,7 @@ function readStored(): InboxLocalState {
     read: new Set(),
     unread: new Set(),
     starred: new Map(),
-    hidden: new Set(),
+    environment: null,
   };
 }
 
@@ -57,7 +57,7 @@ function serialize(next: InboxLocalState, withImages: boolean) {
         ? message
         : { ...message, media: { ...message.media, image: null } },
     ),
-    hidden: [...next.hidden],
+    environment: next.environment,
   };
   return JSON.stringify(stored);
 }
@@ -110,8 +110,10 @@ export function toggleInboxMessageStar(message: DesktopInboxMessage) {
   commit({ ...state, starred });
 }
 
-export function toggleInboxEnvironment(channelId: string) {
-  const hidden = new Set(state.hidden);
-  if (!hidden.delete(channelId)) hidden.add(channelId);
-  commit({ ...state, hidden });
+export function isInboxEnvironmentShown(local: InboxLocalState, channelId: string) {
+  return local.environment === null || local.environment === channelId;
+}
+
+export function showInboxEnvironment(environment: string | null) {
+  commit({ ...state, environment });
 }

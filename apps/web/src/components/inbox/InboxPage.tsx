@@ -29,14 +29,7 @@ import { workspaceAreaProps } from "../../lib/workspaceFocus";
 import { ExpandedImageDialogHost, openExpandedImagePreview } from "../chat/ExpandedImageDialog";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import {
-  Menu,
-  MenuCheckboxItem,
-  MenuGroup,
-  MenuGroupLabel,
-  MenuPopup,
-  MenuTrigger,
-} from "../ui/menu";
+import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "../ui/menu";
 import { SidebarInset } from "../ui/sidebar";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import {
@@ -53,9 +46,10 @@ import {
   publishNewestInboxMessages,
 } from "./inboxFeed";
 import {
+  isInboxEnvironmentShown,
   isInboxMessageUnread,
   setInboxMessagesRead,
-  toggleInboxEnvironment,
+  showInboxEnvironment,
   toggleInboxMessageStar,
   useInboxLocalState,
 } from "./inboxLocalState";
@@ -382,41 +376,51 @@ function MessageBubble({
   );
 }
 
+const ALL_ENVIRONMENTS = "all";
+
 function EnvironmentFilter({
   channels,
-  hidden,
+  selected,
 }: {
   channels: ReadonlyArray<DesktopInboxChannel>;
-  hidden: ReadonlySet<string>;
+  selected: string | null;
 }) {
-  const filtered = channels.some((channel) => hidden.has(channel.id));
+  const channel = channels.find((candidate) => candidate.id === selected);
   return (
     <Menu>
       <MenuTrigger
         render={
           <Button
-            variant={filtered ? "secondary" : "ghost-muted"}
+            variant="ghost-muted"
             size="icon-xs"
-            aria-label="Filter environments"
+            aria-label={channel ? `Filter environments: ${channel.label}` : "Filter environments"}
           />
         }
       >
-        <ListFilterIcon className="size-4" />
+        {channel === undefined ? (
+          <ListFilterIcon className="size-4" />
+        ) : channel.channel === "telegram" ? (
+          <SendIcon className="size-4" style={{ color: channel.color }} />
+        ) : (
+          <MessagesSquareIcon className="size-4" style={{ color: channel.color }} />
+        )}
       </MenuTrigger>
       <MenuPopup align="end">
-        <MenuGroup>
-          <MenuGroupLabel>Environments</MenuGroupLabel>
-          {channels.map((channel) => (
-            <MenuCheckboxItem
-              key={channel.id}
-              checked={!hidden.has(channel.id)}
-              closeOnClick={false}
-              onCheckedChange={() => toggleInboxEnvironment(channel.id)}
-            >
-              {channel.label} · {CHANNEL_LABEL[channel.channel] ?? channel.channel}
-            </MenuCheckboxItem>
+        <MenuRadioGroup
+          value={selected ?? ALL_ENVIRONMENTS}
+          onValueChange={(value: string) =>
+            showInboxEnvironment(value === ALL_ENVIRONMENTS ? null : value)
+          }
+        >
+          <MenuRadioItem value={ALL_ENVIRONMENTS} closeOnClick>
+            All environments
+          </MenuRadioItem>
+          {channels.map((candidate) => (
+            <MenuRadioItem key={candidate.id} value={candidate.id} closeOnClick>
+              {candidate.label} · {CHANNEL_LABEL[candidate.channel] ?? candidate.channel}
+            </MenuRadioItem>
           ))}
-        </MenuGroup>
+        </MenuRadioGroup>
       </MenuPopup>
     </Menu>
   );
@@ -478,7 +482,7 @@ export function InboxPage({ search }: { search: InboxSearch }) {
 
   // A chat is opened on purpose, so hiding its environment only thins the overview.
   const isShown = (message: DesktopInboxMessage) =>
-    conversation !== null || !local.hidden.has(message.channelId);
+    conversation !== null || isInboxEnvironmentShown(local, message.channelId);
 
   const load = useEffectEvent(async (direction: "older" | "newest", requested = false) => {
     if (loadingRef.current) return;
@@ -602,7 +606,7 @@ export function InboxPage({ search }: { search: InboxSearch }) {
       ? [...local.starred.values()]
           .filter((message) =>
             conversation === null
-              ? !local.hidden.has(message.channelId)
+              ? isInboxEnvironmentShown(local, message.channelId)
               : message.channelId === conversation.channelId &&
                 message.conversationId === conversation.conversationId,
           )
@@ -673,7 +677,7 @@ export function InboxPage({ search }: { search: InboxSearch }) {
               <span className="text-xs text-muted-foreground">Sample data</span>
             ) : null}
             {conversation === null ? (
-              <EnvironmentFilter channels={inbox.channels} hidden={local.hidden} />
+              <EnvironmentFilter channels={inbox.channels} selected={local.environment} />
             ) : (
               inbox.channels.map((channel) => (
                 <EnvironmentBadge key={channel.id} channel={channel} />

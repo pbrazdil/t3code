@@ -10,7 +10,11 @@ import {
 
 import { cn } from "~/lib/utils";
 import { useNewestInboxMessages } from "../inbox/inboxFeed";
-import { isInboxMessageUnread, useInboxLocalState } from "../inbox/inboxLocalState";
+import {
+  isInboxEnvironmentShown,
+  isInboxMessageUnread,
+  useInboxLocalState,
+} from "../inbox/inboxLocalState";
 import { SidebarMenuButton, useSidebar } from "../ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
@@ -18,7 +22,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 function InboxUnreadCount() {
   const newest = useNewestInboxMessages();
   const local = useInboxLocalState();
-  const shown = newest?.filter((message) => !local.hidden.has(message.channelId));
+  const shown = newest?.filter((message) => isInboxEnvironmentShown(local, message.channelId));
   const count = shown?.filter((message) => isInboxMessageUnread(local, message)).length ?? 0;
   if (!shown || count === 0) return null;
   return (
