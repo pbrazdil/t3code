@@ -7,6 +7,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import {
   CheckCheckIcon,
   CheckIcon,
+  ListFilterIcon,
   MessagesSquareIcon,
   PaperclipIcon,
   SendIcon,
@@ -28,6 +29,14 @@ import { workspaceAreaProps } from "../../lib/workspaceFocus";
 import { ExpandedImageDialogHost, openExpandedImagePreview } from "../chat/ExpandedImageDialog";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
+import {
+  Menu,
+  MenuCheckboxItem,
+  MenuGroup,
+  MenuGroupLabel,
+  MenuPopup,
+  MenuTrigger,
+} from "../ui/menu";
 import { SidebarInset } from "../ui/sidebar";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import {
@@ -373,20 +382,43 @@ function MessageBubble({
   );
 }
 
-function EnvironmentToggle({ channel, hidden }: { channel: DesktopInboxChannel; hidden: boolean }) {
+function EnvironmentFilter({
+  channels,
+  hidden,
+}: {
+  channels: ReadonlyArray<DesktopInboxChannel>;
+  hidden: ReadonlySet<string>;
+}) {
+  const filtered = channels.some((channel) => hidden.has(channel.id));
   return (
-    <button
-      type="button"
-      aria-pressed={!hidden}
-      aria-label={`Show ${channel.label}`}
-      onClick={() => toggleInboxEnvironment(channel.id)}
-      className={cn(
-        "cursor-pointer rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
-        hidden && "opacity-40 grayscale",
-      )}
-    >
-      <EnvironmentBadge channel={channel} />
-    </button>
+    <Menu>
+      <MenuTrigger
+        render={
+          <Button
+            variant={filtered ? "secondary" : "ghost-muted"}
+            size="icon-xs"
+            aria-label="Filter environments"
+          />
+        }
+      >
+        <ListFilterIcon className="size-4" />
+      </MenuTrigger>
+      <MenuPopup align="end">
+        <MenuGroup>
+          <MenuGroupLabel>Environments</MenuGroupLabel>
+          {channels.map((channel) => (
+            <MenuCheckboxItem
+              key={channel.id}
+              checked={!hidden.has(channel.id)}
+              closeOnClick={false}
+              onCheckedChange={() => toggleInboxEnvironment(channel.id)}
+            >
+              {channel.label} · {CHANNEL_LABEL[channel.channel] ?? channel.channel}
+            </MenuCheckboxItem>
+          ))}
+        </MenuGroup>
+      </MenuPopup>
+    </Menu>
   );
 }
 
@@ -640,16 +672,12 @@ export function InboxPage({ search }: { search: InboxSearch }) {
             {inbox.sample ? (
               <span className="text-xs text-muted-foreground">Sample data</span>
             ) : null}
-            {inbox.channels.map((channel) =>
-              conversation === null ? (
-                <EnvironmentToggle
-                  key={channel.id}
-                  channel={channel}
-                  hidden={local.hidden.has(channel.id)}
-                />
-              ) : (
+            {conversation === null ? (
+              <EnvironmentFilter channels={inbox.channels} hidden={local.hidden} />
+            ) : (
+              inbox.channels.map((channel) => (
                 <EnvironmentBadge key={channel.id} channel={channel} />
-              ),
+              ))
             )}
           </div>
         </WorkspacePageHeader>
