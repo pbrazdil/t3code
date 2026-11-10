@@ -28,23 +28,20 @@ export async function loadInboxPage(input: DesktopInboxPageInput) {
     : { page: sampleInboxPage(input), sample: true };
 }
 
-// The newest page across all chats, kept fresh while anything shows it (the sidebar count).
+// The newest page of every channel, kept fresh while anything counts unread messages in it.
+// A page across channels would hide a quiet channel behind a busy one.
 let newest: ReadonlyArray<DesktopInboxMessage> | null = null;
-let newestAt = 0;
 let timer: ReturnType<typeof setInterval> | null = null;
 const listeners = new Set<() => void>();
 
-/** The open Inbox loads the same page; sharing it saves the feed a channel round trip. */
-export function publishNewestInboxMessages(messages: ReadonlyArray<DesktopInboxMessage>) {
-  newest = messages;
-  newestAt = Date.now();
-  for (const listener of listeners) listener();
-}
-
 async function refresh() {
-  if (document.hidden || Date.now() - newestAt < INBOX_REFRESH_MS / 2) return;
-  const loaded = await loadInboxPage({ limit: INBOX_PAGE_SIZE }).catch(() => null);
-  if (loaded && !loaded.sample) publishNewestInboxMessages(loaded.page.messages);
+  if (document.hidden) return;
+  const loaded = await loadInboxPage({ limit: INBOX_PAGE_SIZE, perChannel: true }).catch(
+    () => null,
+  );
+  if (!loaded || loaded.sample) return;
+  newest = loaded.page.messages;
+  for (const listener of listeners) listener();
 }
 
 function subscribe(listener: () => void) {

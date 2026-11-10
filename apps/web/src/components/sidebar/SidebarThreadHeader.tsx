@@ -18,7 +18,7 @@ import {
 import { SidebarMenuButton, useSidebar } from "../ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
-/** Unread messages on the newest Inbox page; "+" when the whole page is unread. */
+/** Unread messages on each environment's newest Inbox page; "+" when all of them are unread. */
 function InboxUnreadCount() {
   const newest = useNewestInboxMessages();
   const local = useInboxLocalState();

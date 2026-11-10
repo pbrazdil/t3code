@@ -378,6 +378,8 @@ export const DesktopInboxPageInputSchema = Schema.Struct({
   conversation: Schema.optionalKey(
     Schema.Struct({ channelId: Schema.String, conversationId: Schema.String }),
   ),
+  /** Keeps `limit` messages of every channel, for counting; such a page must not be paged on. */
+  perChannel: Schema.optionalKey(Schema.Boolean),
 });
 export type DesktopInboxPageInput = typeof DesktopInboxPageInputSchema.Type;
 

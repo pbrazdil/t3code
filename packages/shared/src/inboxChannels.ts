@@ -77,7 +77,7 @@ async function readChannel(config: typeof ChannelConfig.Type, args: ReadonlyArra
 
 async function loadPage(
   configPath: string,
-  { limit, before, conversation }: DesktopInboxPageInput,
+  { limit, before, conversation, perChannel }: DesktopInboxPageInput,
 ): Promise<DesktopInboxPage> {
   const configs = await readConfig(configPath).catch((error: unknown) => firstLine(error));
   if (typeof configs === "string") {
@@ -109,7 +109,8 @@ async function loadPage(
     messages: results
       .flatMap((result) => result.messages)
       .sort((a, b) => b.receivedAt.localeCompare(a.receivedAt))
-      .slice(0, limit),
+      // Cut to the newest overall, so paging before the oldest row skips no channel's messages.
+      .slice(0, perChannel ? undefined : limit),
     // A channel that filled its limit may hold older messages.
     hasMore: results.some((result) => result.messages.length >= limit),
     errors: results.flatMap((result) =>

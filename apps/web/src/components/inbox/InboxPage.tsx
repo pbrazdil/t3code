@@ -48,7 +48,6 @@ import {
   INBOX_PAGE_SIZE,
   INBOX_REFRESH_MS,
   loadInboxPage,
-  publishNewestInboxMessages,
   useNewestInboxMessages,
 } from "./inboxFeed";
 import { InboxEnvironmentIcon } from "./InboxEnvironmentIcon";
@@ -461,7 +460,7 @@ function EnvironmentSwitcher({
   onSelect: (environment: string | null) => void;
 }) {
   const local = useInboxLocalState();
-  // Unread among the newest page across all chats, the same one the sidebar counts.
+  // Unread among each environment's newest page, the same messages the sidebar counts.
   const unread = (useNewestInboxMessages() ?? []).filter((message) =>
     isInboxMessageUnread(local, message),
   );
@@ -603,7 +602,6 @@ export function InboxPage({ search }: { search: InboxSearch }) {
       return;
     }
     const { page, sample } = loaded;
-    if (!before && !conversation && !sample) publishNewestInboxMessages(page.messages);
     const messages = mergeMessages(inbox.messages, page.messages);
     const next: InboxState = {
       channels: page.channels,
