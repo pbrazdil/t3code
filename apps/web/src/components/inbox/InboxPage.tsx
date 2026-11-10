@@ -4,8 +4,15 @@ import type {
   DesktopInboxPage,
   DesktopInboxPageInput,
 } from "@t3tools/contracts";
-import { Link } from "@tanstack/react-router";
-import { MessagesSquareIcon, PaperclipIcon, SendIcon } from "lucide-react";
+import { Link, useNavigate } from "@tanstack/react-router";
+import {
+  CheckCheckIcon,
+  CheckIcon,
+  MessagesSquareIcon,
+  PaperclipIcon,
+  SendIcon,
+  StarIcon,
+} from "lucide-react";
 import {
   Fragment,
   useEffect,
@@ -20,7 +27,9 @@ import { isElectron } from "~/env";
 import { cn } from "~/lib/utils";
 import { workspaceAreaProps } from "../../lib/workspaceFocus";
 import { Badge } from "../ui/badge";
+import { Button } from "../ui/button";
 import { SidebarInset } from "../ui/sidebar";
+import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import {
   WorkspaceBreadcrumb,
   WorkspaceBreadcrumbItem,
@@ -28,6 +37,12 @@ import {
 } from "../WorkspaceBreadcrumb";
 import { WorkspacePageContainer } from "../WorkspacePageContainer";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
+import {
+  isInboxMessageUnread,
+  setInboxMessagesRead,
+  toggleInboxMessageStar,
+  useInboxLocalState,
+} from "./inboxLocalState";
 import { sampleInboxPage } from "./inboxStaticData";
 
 const PAGE_SIZE = 50;
@@ -43,6 +58,7 @@ const TIME_FORMAT = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute
 export interface InboxSearch {
   readonly channel?: string;
   readonly chat?: string;
+  readonly filter?: "unread" | "starred";
 }
 
 interface InboxState {
@@ -228,8 +244,12 @@ function MessageBubble({
   first,
   last,
   showSender,
+  unread,
+  starred,
 }: {
   message: DesktopInboxMessage;
+  unread: boolean;
+  starred: boolean;
   /** First and last message of a run by one sender. */
   first: boolean;
   last: boolean;
@@ -242,7 +262,7 @@ function MessageBubble({
   const emojiOnly = message.media === null && isEmojiOnly(message.text);
   const meta = (
     <span className="float-right mt-1.5 ml-3 flex items-center gap-1.5 text-xs leading-none text-muted-foreground tabular-nums">
-      {message.unread ? (
+      {unread ? (
         <span role="img" aria-label="Unread" className="size-1.5 rounded-full bg-(--label)" />
       ) : null}
       <time dateTime={message.receivedAt}>{TIME_FORMAT.format(new Date(message.receivedAt))}</time>
@@ -251,7 +271,7 @@ function MessageBubble({
   return (
     <li
       className={cn(
-        "flex min-w-0 items-end gap-2",
+        "group/message flex min-w-0 items-end gap-2",
         own && "flex-row-reverse",
         first ? "mt-2.5 first:mt-0" : "mt-0.5",
       )}
@@ -294,13 +314,30 @@ function MessageBubble({
           className={cn(
             "flow-root wrap-break-word whitespace-pre-wrap",
             emojiOnly ? "text-4xl" : "px-3 py-1.5",
-            message.unread && "font-medium",
+            unread && "font-medium",
           )}
         >
           <MessageText text={message.text} />
           {meta}
         </div>
       </div>
+      <span
+        className={cn(
+          "self-center",
+          !starred && "opacity-0 group-hover/message:opacity-100 has-focus-visible:opacity-100",
+        )}
+      >
+        <Button
+          variant="ghost-muted"
+          size="icon-xs"
+          aria-label={starred ? "Remove star" : "Star message"}
+          aria-pressed={starred}
+          title={starred ? "Remove star" : "Star message"}
+          onClick={() => toggleInboxMessageStar(message)}
+        >
+          <StarIcon aria-hidden className={cn(starred && "fill-warning text-warning")} />
+        </Button>
+      </span>
     </li>
   );
 }
@@ -321,6 +358,12 @@ export function InboxPage({ search }: { search: InboxSearch }) {
       ? { channelId: search.channel, conversationId: search.chat }
       : null;
   const cacheKey = conversation ? `${conversation.channelId}:${conversation.conversationId}` : "";
+  const filter = search.filter ?? "all";
+  const scrollKey = `${cacheKey}|${filter}`;
+  const navigate = useNavigate();
+  const local = useInboxLocalState();
+  // A filtered list stops loading by itself once a page adds nothing to it.
+  const [searchPaused, setSearchPaused] = useState(false);
   const [inbox, setInbox] = useState(() => inboxCache.get(cacheKey) ?? EMPTY_INBOX);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const sentinelRef = useRef<HTMLLIElement | null>(null);
@@ -331,14 +374,14 @@ export function InboxPage({ search }: { search: InboxSearch }) {
   // Where the scroll position goes once the next list renders: the bottom, or the
   // message that was at the top before older ones were added above it.
   const anchorRef = useRef<"bottom" | { height: number; top: number } | ScrollPosition | null>(
-    inboxScroll.get(cacheKey) ?? "bottom",
+    inboxScroll.get(scrollKey) ?? "bottom",
   );
 
   const rememberScroll = () => {
     const scroller = scrollRef.current;
     if (!scroller) return;
     if (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < STICK_TO_BOTTOM_PX) {
-      inboxScroll.delete(cacheKey);
+      inboxScroll.delete(scrollKey);
       return;
     }
     const top = scroller.getBoundingClientRect().top;
@@ -347,14 +390,19 @@ export function InboxPage({ search }: { search: InboxSearch }) {
       const group = groups[index]!;
       const offset = group.getBoundingClientRect().top - top;
       if (offset <= 0 || index === 0) {
-        inboxScroll.set(cacheKey, { group: group.dataset.inboxGroup!, offset });
+        inboxScroll.set(scrollKey, { group: group.dataset.inboxGroup!, offset });
         return;
       }
     }
   };
 
-  const load = useEffectEvent(async (direction: "older" | "newest") => {
-    if (loadingRef.current || (direction === "older" && !inbox.hasMore)) return;
+  const load = useEffectEvent(async (direction: "older" | "newest", requested = false) => {
+    if (loadingRef.current) return;
+    if (direction === "older") {
+      if (!inbox.hasMore || (searchPaused && !requested)) return;
+      // Stars are kept here; channels are only asked once, for their names and colours.
+      if (filter === "starred" && inbox.channels.length > 0) return;
+    }
     loadingRef.current = true;
     const before = direction === "older" ? inbox.messages[0]?.receivedAt : undefined;
     const loaded = await loadInboxPage({
@@ -394,6 +442,15 @@ export function InboxPage({ search }: { search: InboxSearch }) {
     }
     inboxCache.set(cacheKey, next);
     setInbox(next);
+    if (direction === "older") {
+      const known = new Set(inbox.messages.map((message) => message.id));
+      setSearchPaused(
+        filter === "unread" &&
+          !messages.some(
+            (message) => !known.has(message.id) && isInboxMessageUnread(local, message),
+          ),
+      );
+    }
     // A short page can leave the sentinel in range; observing again reports it once more.
     const sentinel = sentinelRef.current;
     if (sentinel && observerRef.current) {
@@ -450,7 +507,36 @@ export function InboxPage({ search }: { search: InboxSearch }) {
 
   const channelById = new Map(inbox.channels.map((channel) => [channel.id, channel]));
   const conversationName = conversation ? (inbox.messages.at(-1)?.conversation ?? "Chat") : null;
-  const groups = groupByConversation(inbox.messages);
+  const shown =
+    filter === "starred"
+      ? [...local.starred.values()]
+          .filter(
+            (message) =>
+              conversation === null ||
+              (message.channelId === conversation.channelId &&
+                message.conversationId === conversation.conversationId),
+          )
+          .toSorted((a, b) => a.receivedAt.localeCompare(b.receivedAt))
+      : filter === "unread"
+        ? inbox.messages.filter((message) => isInboxMessageUnread(local, message))
+        : inbox.messages;
+  const groups = groupByConversation(shown);
+
+  const showFilter = (next: string) => {
+    const nextFilter = next === "unread" || next === "starred" ? next : undefined;
+    anchorRef.current = inboxScroll.get(`${cacheKey}|${nextFilter ?? "all"}`) ?? "bottom";
+    setSearchPaused(false);
+    void navigate({
+      to: "/inbox",
+      search: {
+        ...(conversation
+          ? { channel: conversation.channelId, chat: conversation.conversationId }
+          : {}),
+        ...(nextFilter ? { filter: nextFilter } : {}),
+      },
+      replace: true,
+    });
+  };
 
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none">
@@ -479,6 +565,17 @@ export function InboxPage({ search }: { search: InboxSearch }) {
             )}
           </WorkspaceBreadcrumb>
           <div className="min-w-0 flex-1" />
+          <ToggleGroup
+            aria-label="Show messages"
+            value={[filter]}
+            onValueChange={(next) => {
+              if (next[0]) showFilter(next[0]);
+            }}
+          >
+            <Toggle value="all">All</Toggle>
+            <Toggle value="unread">Unread</Toggle>
+            <Toggle value="starred">Starred</Toggle>
+          </ToggleGroup>
           <div className="flex shrink-0 items-center gap-2">
             {inbox.sample ? (
               <span className="text-xs text-muted-foreground">Sample data</span>
@@ -500,7 +597,23 @@ export function InboxPage({ search }: { search: InboxSearch }) {
           <WorkspacePageContainer width="readable" className="min-h-full justify-end gap-4">
             <ul className="m-0 flex list-none flex-col gap-2 p-0">
               <li ref={sentinelRef} className="py-4 text-center text-xs text-muted-foreground">
-                {inbox.hasMore ? "Loading messages…" : "No older messages"}
+                {filter === "starred" ? (
+                  groups.length === 0 ? (
+                    "No starred messages"
+                  ) : null
+                ) : !inbox.hasMore ? (
+                  groups.length === 0 && filter === "unread" ? (
+                    "No unread messages"
+                  ) : (
+                    "No older messages"
+                  )
+                ) : searchPaused ? (
+                  <Button variant="ghost-muted" size="xs" onClick={() => void load("older", true)}>
+                    {groups.length === 0 ? "No unread messages here. " : ""}Search older messages
+                  </Button>
+                ) : (
+                  "Loading messages…"
+                )}
               </li>
               {groups.map((group) => {
                 const channel = channelById.get(group.channelId);
@@ -510,6 +623,27 @@ export function InboxPage({ search }: { search: InboxSearch }) {
                 const showSenders = group.messages.some(
                   (message) => message.sender !== "You" && message.sender !== name,
                 );
+                const received = group.messages.filter((message) => message.sender !== "You");
+                const groupUnread = received.some((message) =>
+                  isInboxMessageUnread(local, message),
+                );
+                const readButton =
+                  received.length > 0 ? (
+                    <Button
+                      variant="ghost-muted"
+                      size="icon-xs"
+                      aria-label={groupUnread ? "Mark as read" : "Mark as unread"}
+                      title={groupUnread ? "Mark as read" : "Mark as unread"}
+                      onClick={() =>
+                        setInboxMessagesRead(
+                          received.map((message) => message.id),
+                          groupUnread,
+                        )
+                      }
+                    >
+                      {groupUnread ? <CheckIcon aria-hidden /> : <CheckCheckIcon aria-hidden />}
+                    </Button>
+                  ) : null;
                 return (
                   <li
                     key={group.key}
@@ -539,7 +673,10 @@ export function InboxPage({ search }: { search: InboxSearch }) {
                         >
                           {DAY_FORMAT.format(new Date(last.receivedAt))}
                         </time>
+                        {readButton}
                       </div>
+                    ) : readButton ? (
+                      <div className="flex justify-end">{readButton}</div>
                     ) : null}
                     <ul className="m-0 flex list-none flex-col p-0">
                       {group.messages.map((message, index) => {
@@ -564,6 +701,8 @@ export function InboxPage({ search }: { search: InboxSearch }) {
                                 next?.sender !== message.sender || dayOf(next) !== dayOf(message)
                               }
                               showSender={showSenders}
+                              unread={isInboxMessageUnread(local, message)}
+                              starred={local.starred.has(message.id)}
                             />
                           </Fragment>
                         );
