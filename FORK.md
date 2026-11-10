@@ -89,7 +89,8 @@ Garden k příkazu přidá `--limit N` a pro starší stránky `--before <ISO č
 JSON pole zpráv od nejnovější (`id`, `sender`, `conversation`, `conversationId`,
 `text`, `receivedAt`, `unread`, volitelně `media` s `label` a náhledem `image` jako data URL a profilové obrázky `senderAvatar` a `conversationAvatar` jako data URL). Pro zobrazení jednoho chatu přidá `--chat=<conversationId>`. Ve vývojovém webu (`vp run dev`) čte stejnou konfiguraci Vite dev server na `/__garden/inbox`, jen pro stránku otevřenou z `localhost`. Bez konfigurace a v sestaveném webu Inbox ukazuje ukázková data. Skript pro
 Telegram, jeho přihlašovací údaje a session leží mimo repozitář v
-`/Users/petrbrazdil/Repos/garden/telegram`.
+`/Users/petrbrazdil/Repos/garden/telegram`. Skript pro Zulip (Braiins) a jeho `zuliprc` s API klíčem leží
+v `/Users/petrbrazdil/Repos/garden/zulip`.
 
 Fork má vlastní název `Garden` a bundle ID `com.pbrazdil.garden`, aby jej
 macOS odlišil od oficiální aplikace i při přístupu k šifrovacímu klíči Electronu
