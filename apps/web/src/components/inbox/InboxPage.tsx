@@ -647,13 +647,17 @@ export function InboxPage({ search }: { search: InboxSearch }) {
       >
         <WorkspacePageHeader electron={isElectron} className="bg-background">
           <WorkspaceBreadcrumb ariaLabel="Inbox breadcrumb">
-            {conversationName === null ? (
-              <WorkspaceBreadcrumbItem current={crumbChannel === undefined}>
+            {conversationName === null && crumbChannel === undefined ? (
+              <WorkspaceBreadcrumbItem current>
                 <h1 className="truncate">Inbox</h1>
               </WorkspaceBreadcrumbItem>
             ) : (
               <WorkspaceBreadcrumbItem>
-                <Link to="/inbox" className="text-muted-foreground hover:text-foreground">
+                <Link
+                  to="/inbox"
+                  onClick={() => showInboxEnvironment(null)}
+                  className="text-muted-foreground hover:text-foreground"
+                >
                   Inbox
                 </Link>
               </WorkspaceBreadcrumbItem>
@@ -662,13 +666,21 @@ export function InboxPage({ search }: { search: InboxSearch }) {
               <>
                 <WorkspaceBreadcrumbSeparator />
                 <WorkspaceBreadcrumbItem current={conversationName === null}>
-                  <span
-                    className="flex items-center gap-1.5 text-muted-foreground"
-                    style={{ "--label": crumbChannel.color } as CSSProperties}
-                  >
-                    <InboxEnvironmentIcon channel={crumbChannel} />
-                    {crumbChannel.label}
-                  </span>
+                  {conversationName === null ? (
+                    <h1 className="flex items-center gap-1.5">
+                      <InboxEnvironmentIcon channel={crumbChannel} />
+                      {crumbChannel.label}
+                    </h1>
+                  ) : (
+                    <Link
+                      to="/inbox"
+                      onClick={() => showInboxEnvironment(crumbChannel.id)}
+                      className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground"
+                    >
+                      <InboxEnvironmentIcon channel={crumbChannel} />
+                      {crumbChannel.label}
+                    </Link>
+                  )}
                 </WorkspaceBreadcrumbItem>
               </>
             ) : null}
