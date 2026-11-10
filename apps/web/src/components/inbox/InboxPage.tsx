@@ -10,6 +10,8 @@ import {
   CheckCheckIcon,
   CheckIcon,
   ChevronDownIcon,
+  CopyIcon,
+  DownloadIcon,
   PaperclipIcon,
   StarIcon,
 } from "lucide-react";
@@ -28,10 +30,12 @@ import { observeResize } from "~/lib/observeResize";
 import { cn } from "~/lib/utils";
 import { workspaceAreaProps } from "../../lib/workspaceFocus";
 import { ExpandedImageDialogHost, openExpandedImagePreview } from "../chat/ExpandedImageDialog";
+import { downloadMedia, readMediaPng } from "../media/mediaContent";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "../ui/menu";
 import { SidebarInset } from "../ui/sidebar";
+import { toastManager } from "../ui/toast";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import {
   WorkspaceBreadcrumb,
@@ -261,6 +265,66 @@ function MessageText({ text }: { text: string }) {
   );
 }
 
+const IMAGE_EXTENSION: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/gif": "gif",
+};
+
+// The preview may be re-encoded, so the name follows the data, not the original upload.
+function imageFileName(label: string, image: string) {
+  const type = /^data:([^;,]+)/.exec(image)?.[1] ?? "";
+  const stem = label.replace(/\.(?:png|jpe?g|gif|webp)$/i, "");
+  return `${stem}.${IMAGE_EXTENSION[type] ?? "jpg"}`;
+}
+
+function MessageImageActions({ label, image }: { label: string; image: string }) {
+  const report = (action: Promise<void>, done: string, failed: string) =>
+    action.then(
+      () => toastManager.add({ type: "success", title: done }),
+      (error: unknown) =>
+        toastManager.add({
+          type: "error",
+          title: failed,
+          description: error instanceof Error ? error.message : String(error),
+        }),
+    );
+  return (
+    <>
+      <Button
+        variant="ghost-muted"
+        size="icon-xs"
+        aria-label="Copy image"
+        onClick={() =>
+          // The write starts inside the click; the picture may finish decoding later.
+          void report(
+            navigator.clipboard.write([new ClipboardItem({ "image/png": readMediaPng(image) })]),
+            "Image copied",
+            "Could not copy image",
+          )
+        }
+      >
+        <CopyIcon aria-hidden />
+      </Button>
+      <Button
+        variant="ghost-muted"
+        size="icon-xs"
+        aria-label="Download image"
+        onClick={() =>
+          void report(
+            downloadMedia(image, imageFileName(label, image)),
+            "Download started",
+            "Could not download image",
+          )
+        }
+      >
+        <DownloadIcon aria-hidden />
+      </Button>
+    </>
+  );
+}
+
 function MessageBubble({
   message,
   first,
@@ -376,6 +440,9 @@ function MessageBubble({
           <StarIcon aria-hidden className={cn(starred && "fill-warning text-warning")} />
         </Button>
         <MessageTaskMenu message={message} tasks={tasks} />
+        {message.media?.image ? (
+          <MessageImageActions label={message.media.label} image={message.media.image} />
+        ) : null}
       </span>
     </li>
   );
