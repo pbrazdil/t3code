@@ -92,6 +92,8 @@ Telegram, jeho přihlašovací údaje a session leží mimo repozitář v
 `/Users/petrbrazdil/Repos/garden/telegram`. Skript pro Zulip (Braiins) a jeho `zuliprc` s API klíčem leží
 v `/Users/petrbrazdil/Repos/garden/zulip`.
 
+Úkoly z Inboxu se ukládají po prostředích do `~/.garden/inbox/tasks/<id prostředí>.json` (název, stav, odkazy na PR, výňatky přiřazených zpráv). Ve vývojovém webu je čte a zapisuje stejný dev endpoint.
+
 Fork má vlastní název `Garden` a bundle ID `com.pbrazdil.garden`, aby jej
 macOS odlišil od oficiální aplikace i při přístupu k šifrovacímu klíči Electronu
 v Klíčence. Vnitřní název zabalené aplikace je `garden`; také ten musí zůstat

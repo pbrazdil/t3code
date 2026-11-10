@@ -2,6 +2,7 @@ import type {
   DesktopInboxChannel,
   DesktopInboxMessage,
   DesktopInboxPage,
+  DesktopInboxTask,
 } from "@t3tools/contracts";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
@@ -45,6 +46,8 @@ import {
   loadInboxPage,
   publishNewestInboxMessages,
 } from "./inboxFeed";
+import { InboxTasksWidget, MessageTaskMenu } from "./InboxTasks";
+import { useInboxTasks } from "./inboxTaskStore";
 import {
   isInboxEnvironmentShown,
   isInboxMessageUnread,
@@ -56,6 +59,7 @@ import {
 
 const STICK_TO_BOTTOM_PX = 80;
 const INBOX_OVERLAY_KEY = "inbox";
+const NO_TASKS: ReadonlyArray<DesktopInboxTask> = [];
 
 const CHANNEL_LABEL: Record<string, string> = {
   telegram: "Telegram",
@@ -268,10 +272,13 @@ function MessageBubble({
   showSender,
   unread,
   starred,
+  tasks,
 }: {
   message: DesktopInboxMessage;
   unread: boolean;
   starred: boolean;
+  /** Tasks of the message's environment. */
+  tasks: ReadonlyArray<DesktopInboxTask>;
   /** First and last message of a run by one sender. */
   first: boolean;
   last: boolean;
@@ -357,8 +364,9 @@ function MessageBubble({
       </div>
       <span
         className={cn(
-          "self-center",
-          !starred && "opacity-0 group-hover/message:opacity-100 has-focus-visible:opacity-100",
+          "flex self-center",
+          !starred &&
+            "opacity-0 group-hover/message:opacity-100 has-focus-visible:opacity-100 has-data-linked:opacity-100 has-data-popup-open:opacity-100",
         )}
       >
         <Button
@@ -371,6 +379,7 @@ function MessageBubble({
         >
           <StarIcon aria-hidden className={cn(starred && "fill-warning text-warning")} />
         </Button>
+        <MessageTaskMenu message={message} tasks={tasks} />
       </span>
     </li>
   );
@@ -599,6 +608,13 @@ export function InboxPage({ search }: { search: InboxSearch }) {
     };
   }, []);
 
+  const { tasks } = useInboxTasks();
+  const tasksByEnvironment = new Map<string, Array<DesktopInboxTask>>();
+  for (const task of tasks) {
+    const list = tasksByEnvironment.get(task.environmentId);
+    if (list) list.push(task);
+    else tasksByEnvironment.set(task.environmentId, [task]);
+  }
   const channelById = new Map(inbox.channels.map((channel) => [channel.id, channel]));
   const conversationName = conversation ? (inbox.messages.at(-1)?.conversation ?? "Chat") : null;
   const shown =
@@ -686,142 +702,152 @@ export function InboxPage({ search }: { search: InboxSearch }) {
           </div>
         </WorkspacePageHeader>
 
-        <div
-          ref={scrollRef}
-          onScroll={rememberScroll}
-          // Area focus lands here; the first chat link would pull the list to its oldest end.
-          data-workspace-focus-default
-          tabIndex={0}
-          className="topbar-scroll-fade scrollbar-gutter-both min-h-0 flex-1 overflow-y-auto outline-none"
-        >
-          <WorkspacePageContainer width="readable" className="min-h-full justify-end gap-4">
-            <ul className="m-0 flex list-none flex-col gap-2 p-0">
-              <li ref={sentinelRef} className="py-4 text-center text-xs text-muted-foreground">
-                {filter === "starred" ? (
-                  groups.length === 0 ? (
-                    "No starred messages"
-                  ) : null
-                ) : !inbox.hasMore ? (
-                  groups.length === 0 && filter === "unread" ? (
-                    "No unread messages"
-                  ) : (
-                    "No older messages"
-                  )
-                ) : searchPaused ? (
-                  <Button variant="ghost-muted" size="xs" onClick={() => void load("older", true)}>
-                    {groups.length === 0 ? "No unread messages here. " : ""}Search older messages
-                  </Button>
-                ) : (
-                  "Loading messages…"
-                )}
-              </li>
-              {groups.map((group) => {
-                const channel = channelById.get(group.channelId);
-                if (!channel) return null;
-                const last = group.messages.at(-1)!;
-                const name = group.conversation ?? "Chat";
-                const showSenders = group.messages.some(
-                  (message) => message.sender !== "You" && message.sender !== name,
-                );
-                const received = group.messages.filter((message) => message.sender !== "You");
-                const groupUnread = received.some((message) =>
-                  isInboxMessageUnread(local, message),
-                );
-                const readButton =
-                  received.length > 0 ? (
+        <div className="flex min-h-0 flex-1">
+          <div
+            ref={scrollRef}
+            onScroll={rememberScroll}
+            // Area focus lands here; the first chat link would pull the list to its oldest end.
+            data-workspace-focus-default
+            tabIndex={0}
+            className="topbar-scroll-fade scrollbar-gutter-both min-h-0 min-w-0 flex-1 overflow-y-auto outline-none"
+          >
+            <WorkspacePageContainer className="min-h-full max-w-3xl justify-end gap-4">
+              <ul className="m-0 flex list-none flex-col gap-2 p-0">
+                <li ref={sentinelRef} className="py-4 text-center text-xs text-muted-foreground">
+                  {filter === "starred" ? (
+                    groups.length === 0 ? (
+                      "No starred messages"
+                    ) : null
+                  ) : !inbox.hasMore ? (
+                    groups.length === 0 && filter === "unread" ? (
+                      "No unread messages"
+                    ) : (
+                      "No older messages"
+                    )
+                  ) : searchPaused ? (
                     <Button
                       variant="ghost-muted"
-                      size="icon-xs"
-                      aria-label={groupUnread ? "Mark as read" : "Mark as unread"}
-                      title={groupUnread ? "Mark as read" : "Mark as unread"}
-                      onClick={() =>
-                        setInboxMessagesRead(
-                          received.map((message) => message.id),
-                          groupUnread,
-                        )
-                      }
+                      size="xs"
+                      onClick={() => void load("older", true)}
                     >
-                      {groupUnread ? <CheckIcon aria-hidden /> : <CheckCheckIcon aria-hidden />}
+                      {groups.length === 0 ? "No unread messages here. " : ""}Search older messages
                     </Button>
-                  ) : null;
-                return (
-                  <li
-                    key={group.key}
-                    data-inbox-group={group.key}
-                    style={{ "--label": channel.color } as CSSProperties}
-                    className="flex flex-col gap-3 rounded-xl border border-l-4 border-l-(--label) bg-card px-4 py-3 shadow-xs"
-                  >
-                    {conversation === null ? (
-                      <div className="flex min-w-0 items-center gap-2.5">
-                        <Avatar name={name} image={last.conversationAvatar} tone={LABEL_TONE} />
-                        {group.conversationId !== null ? (
-                          <Link
-                            to="/inbox"
-                            search={{
-                              channel: group.channelId,
-                              chat: group.conversationId,
-                              filter: "all",
-                            }}
-                            className="min-w-0 truncate text-sm font-semibold underline-offset-2 hover:underline"
+                  ) : (
+                    "Loading messages…"
+                  )}
+                </li>
+                {groups.map((group) => {
+                  const channel = channelById.get(group.channelId);
+                  if (!channel) return null;
+                  const last = group.messages.at(-1)!;
+                  const name = group.conversation ?? "Chat";
+                  const showSenders = group.messages.some(
+                    (message) => message.sender !== "You" && message.sender !== name,
+                  );
+                  const received = group.messages.filter((message) => message.sender !== "You");
+                  const groupUnread = received.some((message) =>
+                    isInboxMessageUnread(local, message),
+                  );
+                  const readButton =
+                    received.length > 0 ? (
+                      <Button
+                        variant="ghost-muted"
+                        size="icon-xs"
+                        aria-label={groupUnread ? "Mark as read" : "Mark as unread"}
+                        title={groupUnread ? "Mark as read" : "Mark as unread"}
+                        onClick={() =>
+                          setInboxMessagesRead(
+                            received.map((message) => message.id),
+                            groupUnread,
+                          )
+                        }
+                      >
+                        {groupUnread ? <CheckIcon aria-hidden /> : <CheckCheckIcon aria-hidden />}
+                      </Button>
+                    ) : null;
+                  return (
+                    <li
+                      key={group.key}
+                      data-inbox-group={group.key}
+                      style={{ "--label": channel.color } as CSSProperties}
+                      className="flex flex-col gap-3 rounded-xl border border-l-4 border-l-(--label) bg-card px-4 py-3 shadow-xs"
+                    >
+                      {conversation === null ? (
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <Avatar name={name} image={last.conversationAvatar} tone={LABEL_TONE} />
+                          {group.conversationId !== null ? (
+                            <Link
+                              to="/inbox"
+                              search={{
+                                channel: group.channelId,
+                                chat: group.conversationId,
+                                filter: "all",
+                              }}
+                              className="min-w-0 truncate text-sm font-semibold underline-offset-2 hover:underline"
+                            >
+                              {name}
+                            </Link>
+                          ) : (
+                            <span className="min-w-0 truncate text-sm font-semibold">{name}</span>
+                          )}
+                          <span className="flex-1" />
+                          <EnvironmentBadge channel={channel} />
+                          <time
+                            dateTime={last.receivedAt}
+                            className="shrink-0 text-xs text-muted-foreground tabular-nums"
                           >
-                            {name}
-                          </Link>
-                        ) : (
-                          <span className="min-w-0 truncate text-sm font-semibold">{name}</span>
-                        )}
-                        <span className="flex-1" />
-                        <EnvironmentBadge channel={channel} />
-                        <time
-                          dateTime={last.receivedAt}
-                          className="shrink-0 text-xs text-muted-foreground tabular-nums"
-                        >
-                          {DAY_FORMAT.format(new Date(last.receivedAt))}
-                        </time>
-                        {readButton}
-                      </div>
-                    ) : readButton ? (
-                      <div className="flex justify-end">{readButton}</div>
-                    ) : null}
-                    <ul className="m-0 flex list-none flex-col p-0">
-                      {group.messages.map((message, index) => {
-                        const previous = group.messages[index - 1];
-                        const next = group.messages[index + 1];
-                        const newDay = previous
-                          ? dayOf(previous) !== dayOf(message)
-                          : conversation !== null;
-                        return (
-                          <Fragment key={message.id}>
-                            {newDay ? (
-                              <li className="my-3 flex items-center gap-3 text-xs text-muted-foreground first:mt-0">
-                                <span aria-hidden className="h-px flex-1 bg-border" />
-                                {DAY_FORMAT.format(new Date(message.receivedAt))}
-                                <span aria-hidden className="h-px flex-1 bg-border" />
-                              </li>
-                            ) : null}
-                            <MessageBubble
-                              message={message}
-                              first={newDay || previous?.sender !== message.sender}
-                              last={
-                                next?.sender !== message.sender || dayOf(next) !== dayOf(message)
-                              }
-                              showSender={showSenders}
-                              unread={isInboxMessageUnread(local, message)}
-                              starred={local.starred.has(message.id)}
-                            />
-                          </Fragment>
-                        );
-                      })}
-                    </ul>
-                  </li>
-                );
-              })}
-            </ul>
-            {inbox.errors.map((error) => (
-              <p key={error.channelId} className="m-0 text-sm text-destructive-foreground">
-                {channelById.get(error.channelId)?.label ?? "Inbox"}: {error.message}
-              </p>
-            ))}
-          </WorkspacePageContainer>
+                            {DAY_FORMAT.format(new Date(last.receivedAt))}
+                          </time>
+                          {readButton}
+                        </div>
+                      ) : readButton ? (
+                        <div className="flex justify-end">{readButton}</div>
+                      ) : null}
+                      <ul className="m-0 flex list-none flex-col p-0">
+                        {group.messages.map((message, index) => {
+                          const previous = group.messages[index - 1];
+                          const next = group.messages[index + 1];
+                          const newDay = previous
+                            ? dayOf(previous) !== dayOf(message)
+                            : conversation !== null;
+                          return (
+                            <Fragment key={message.id}>
+                              {newDay ? (
+                                <li className="my-3 flex items-center gap-3 text-xs text-muted-foreground first:mt-0">
+                                  <span aria-hidden className="h-px flex-1 bg-border" />
+                                  {DAY_FORMAT.format(new Date(message.receivedAt))}
+                                  <span aria-hidden className="h-px flex-1 bg-border" />
+                                </li>
+                              ) : null}
+                              <MessageBubble
+                                message={message}
+                                first={newDay || previous?.sender !== message.sender}
+                                last={
+                                  next?.sender !== message.sender || dayOf(next) !== dayOf(message)
+                                }
+                                showSender={showSenders}
+                                unread={isInboxMessageUnread(local, message)}
+                                starred={local.starred.has(message.id)}
+                                tasks={tasksByEnvironment.get(message.channelId) ?? NO_TASKS}
+                              />
+                            </Fragment>
+                          );
+                        })}
+                      </ul>
+                    </li>
+                  );
+                })}
+              </ul>
+              {inbox.errors.map((error) => (
+                <p key={error.channelId} className="m-0 text-sm text-destructive-foreground">
+                  {channelById.get(error.channelId)?.label ?? "Inbox"}: {error.message}
+                </p>
+              ))}
+            </WorkspacePageContainer>
+          </div>
+          <aside className="hidden w-80 shrink-0 flex-col gap-4 overflow-y-auto border-l px-4 py-6 xl:flex">
+            <InboxTasksWidget channels={inbox.channels} environment={local.environment} />
+          </aside>
         </div>
       </div>
       <ExpandedImageDialogHost threadKey={INBOX_OVERLAY_KEY} />

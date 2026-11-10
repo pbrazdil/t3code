@@ -389,6 +389,39 @@ export const DesktopInboxPageSchema = Schema.Struct({
 });
 export type DesktopInboxPage = typeof DesktopInboxPageSchema.Type;
 
+export const DesktopInboxTaskStatusSchema = Schema.Literals(["todo", "in-progress", "done"]);
+export type DesktopInboxTaskStatus = typeof DesktopInboxTaskStatusSchema.Type;
+
+export const DesktopInboxTaskSchema = Schema.Struct({
+  id: Schema.String,
+  /** The Inbox channel id the task belongs to. */
+  environmentId: Schema.String,
+  title: Schema.String,
+  status: DesktopInboxTaskStatusSchema,
+  /** Pull request URLs. */
+  pullRequests: Schema.Array(Schema.String),
+  /** Inbox messages linked to the task, kept as excerpts so they outlive the feed. */
+  messages: Schema.Array(
+    Schema.Struct({
+      id: Schema.String,
+      conversationId: Schema.NullOr(Schema.String),
+      conversation: Schema.NullOr(Schema.String),
+      sender: Schema.NullOr(Schema.String),
+      text: Schema.String,
+      receivedAt: Schema.String,
+    }),
+  ),
+  createdAt: Schema.String,
+});
+export type DesktopInboxTask = typeof DesktopInboxTaskSchema.Type;
+
+export const DesktopInboxTasksSaveInputSchema = Schema.Struct({
+  environmentId: Schema.String,
+  /** Every task of that environment; replaces what was stored. */
+  tasks: Schema.Array(DesktopInboxTaskSchema),
+});
+export type DesktopInboxTasksSaveInput = typeof DesktopInboxTasksSaveInputSchema.Type;
+
 export interface DesktopUpdateActionResult {
   accepted: boolean;
   completed: boolean;
@@ -1197,6 +1230,9 @@ export interface DesktopBridge {
   /** Garden: messages from the channels configured in `<home>/inbox/channels.json`. */
   inbox: {
     loadPage: (input: DesktopInboxPageInput) => Promise<DesktopInboxPage>;
+    /** Tasks of every environment, stored in `<home>/inbox/tasks/<environment>.json`. */
+    loadTasks: () => Promise<ReadonlyArray<DesktopInboxTask>>;
+    saveTasks: (input: DesktopInboxTasksSaveInput) => Promise<void>;
   };
   webLinks: {
     setReady: (ready: boolean) => Promise<void>;

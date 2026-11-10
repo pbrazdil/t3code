@@ -301,6 +301,8 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   },
   inbox: {
     loadPage: (input) => ipcRenderer.invoke(IpcChannels.INBOX_LOAD_PAGE_CHANNEL, input),
+    loadTasks: () => ipcRenderer.invoke(IpcChannels.INBOX_LOAD_TASKS_CHANNEL),
+    saveTasks: (input) => ipcRenderer.invoke(IpcChannels.INBOX_SAVE_TASKS_CHANNEL, input),
   },
   onUpdateState: (listener) => {
     const wrappedListener = (_event: Electron.IpcRendererEvent, state: unknown) => {

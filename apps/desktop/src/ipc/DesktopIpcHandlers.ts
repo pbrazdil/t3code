@@ -83,7 +83,7 @@ import {
   uninstallCliCommand,
   addCliCommandToPath,
 } from "./methods/cliCommand.ts";
-import { loadInboxPage } from "./methods/inbox.ts";
+import { loadInboxPage, loadInboxTasks, saveInboxTasks } from "./methods/inbox.ts";
 
 export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers")(function* () {
   const ipc = yield* DesktopIpc.DesktopIpc;
@@ -168,6 +168,8 @@ export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers"
   yield* ipc.handle(uninstallCliCommand);
   yield* ipc.handle(addCliCommandToPath);
   yield* ipc.handle(loadInboxPage);
+  yield* ipc.handle(loadInboxTasks);
+  yield* ipc.handle(saveInboxTasks);
   for (const previewMethod of PreviewIpc.methods) {
     // Explicit types preserve the error/service union of these heterogeneous preview methods.
     yield* ipc.handle<
