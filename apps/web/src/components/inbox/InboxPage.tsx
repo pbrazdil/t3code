@@ -9,7 +9,7 @@ import {
   ArrowDownIcon,
   CheckCheckIcon,
   CheckIcon,
-  ListFilterIcon,
+  ChevronDownIcon,
   PaperclipIcon,
   StarIcon,
 } from "lucide-react";
@@ -383,37 +383,26 @@ function MessageBubble({
 
 const ALL_ENVIRONMENTS = "all";
 
-function EnvironmentFilter({
+function EnvironmentSwitcher({
   channels,
   selected,
+  onSelect,
 }: {
   channels: ReadonlyArray<DesktopInboxChannel>;
   selected: string | null;
+  onSelect: (environment: string | null) => void;
 }) {
-  const channel = channels.find((candidate) => candidate.id === selected);
   return (
     <Menu>
       <MenuTrigger
-        render={
-          <Button
-            variant="ghost-muted"
-            size="icon-xs"
-            aria-label={channel ? `Filter environments: ${channel.label}` : "Filter environments"}
-          />
-        }
+        render={<Button variant="ghost-muted" size="icon-xs" aria-label="Switch environment" />}
       >
-        {channel === undefined ? (
-          <ListFilterIcon className="size-4" />
-        ) : (
-          <InboxEnvironmentIcon channel={channel} />
-        )}
+        <ChevronDownIcon aria-hidden />
       </MenuTrigger>
-      <MenuPopup align="end">
+      <MenuPopup align="start">
         <MenuRadioGroup
           value={selected ?? ALL_ENVIRONMENTS}
-          onValueChange={(value: string) =>
-            showInboxEnvironment(value === ALL_ENVIRONMENTS ? null : value)
-          }
+          onValueChange={(value: string) => onSelect(value === ALL_ENVIRONMENTS ? null : value)}
         >
           <MenuRadioItem value={ALL_ENVIRONMENTS} closeOnClick>
             All environments
@@ -695,28 +684,36 @@ export function InboxPage({ search }: { search: InboxSearch }) {
                 </Link>
               </WorkspaceBreadcrumbItem>
             )}
-            {crumbChannel ? (
-              <>
-                <WorkspaceBreadcrumbSeparator />
-                <WorkspaceBreadcrumbItem current={conversationName === null}>
-                  {conversationName === null ? (
-                    <h1 className="flex items-center gap-1.5">
-                      <InboxEnvironmentIcon channel={crumbChannel} />
-                      {crumbChannel.label}
-                    </h1>
-                  ) : (
-                    <Link
-                      to="/inbox"
-                      onClick={() => showInboxEnvironment(crumbChannel.id)}
-                      className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground"
-                    >
-                      <InboxEnvironmentIcon channel={crumbChannel} />
-                      {crumbChannel.label}
-                    </Link>
-                  )}
-                </WorkspaceBreadcrumbItem>
-              </>
-            ) : null}
+            <WorkspaceBreadcrumbSeparator />
+            <WorkspaceBreadcrumbItem current={conversationName === null}>
+              <span className="flex items-center gap-0.5">
+                {crumbChannel === undefined ? (
+                  <span className="text-muted-foreground">All environments</span>
+                ) : conversationName === null ? (
+                  <h1 className="flex items-center gap-1.5">
+                    <InboxEnvironmentIcon channel={crumbChannel} />
+                    {crumbChannel.label}
+                  </h1>
+                ) : (
+                  <Link
+                    to="/inbox"
+                    onClick={() => showInboxEnvironment(crumbChannel.id)}
+                    className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground"
+                  >
+                    <InboxEnvironmentIcon channel={crumbChannel} />
+                    {crumbChannel.label}
+                  </Link>
+                )}
+                <EnvironmentSwitcher
+                  channels={inbox.channels}
+                  selected={crumbChannel?.id ?? null}
+                  onSelect={(environment) => {
+                    showInboxEnvironment(environment);
+                    if (conversation) void navigate({ to: "/inbox" });
+                  }}
+                />
+              </span>
+            </WorkspaceBreadcrumbItem>
             {conversationName === null ? null : (
               <>
                 <WorkspaceBreadcrumbSeparator />
@@ -741,9 +738,6 @@ export function InboxPage({ search }: { search: InboxSearch }) {
           <div className="flex shrink-0 items-center gap-2">
             {inbox.sample ? (
               <span className="text-xs text-muted-foreground">Sample data</span>
-            ) : null}
-            {conversation === null ? (
-              <EnvironmentFilter channels={inbox.channels} selected={local.environment} />
             ) : null}
           </div>
         </WorkspacePageHeader>
