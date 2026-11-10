@@ -205,11 +205,11 @@ function Avatar({
   );
 }
 
-// Links, and the inline Markdown that Zulip sends as source: [label](url), **bold**,
-// @**mention** and `code`.
-// A link target may hold brackets two levels deep, as Kibana URLs do.
+// Links and Zulip's inline Markdown source: [label](url), **bold**, @**mention**, `code`.
+// A link target may hold brackets two levels deep, as Kibana URLs do. Its alternatives take
+// one character each: a repeat inside a repeat never finishes on a long unclosed link.
 const INLINE_PATTERN =
-  /(\[[^\]\n]+\]\(https?:\/\/(?:[^\s()]+|\((?:[^\s()]+|\([^\s()]*\))*\))+\)|https?:\/\/[^\s<>]+|@?\*\*[^*\n]+\*\*|`[^`\n]+`)/;
+  /(\[[^\]\n]+\]\(https?:\/\/(?:[^\s()]|\((?:[^\s()]|\([^\s()]*\))*\))+\)|https?:\/\/[^\s<>]+|@?\*\*[^*\n]+\*\*|`[^`\n]+`)/;
 const MARKDOWN_LINK = /^\[([^\]]+)\]\((.+)\)$/;
 
 function InlineLink({ href, children }: { href: string; children: string }) {
