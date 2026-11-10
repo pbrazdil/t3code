@@ -65,8 +65,19 @@ const EMPTY_INBOX: InboxState = {
 // Reopening the Inbox or a chat shows what was loaded last time while the newest page refreshes.
 const inboxCache = new Map<string, InboxState>();
 
+// Matches INBOX_DEV_PATH in vite/inboxDev.ts: the dev server reads the channels for a browser.
+async function loadDevInboxPage(input: DesktopInboxPageInput) {
+  const response = await fetch("/__garden/inbox", { method: "POST", body: JSON.stringify(input) });
+  if (!response.ok) throw new Error(`Inbox dev server: ${response.status}`);
+  return (await response.json()) as DesktopInboxPage;
+}
+
 async function loadInboxPage(input: DesktopInboxPageInput) {
-  const live = await window.desktopBridge?.inbox.loadPage(input);
+  const live = window.desktopBridge
+    ? await window.desktopBridge.inbox.loadPage(input)
+    : import.meta.env.DEV
+      ? await loadDevInboxPage(input)
+      : undefined;
   return live && live.channels.length > 0
     ? { page: live, sample: false }
     : { page: sampleInboxPage(input), sample: true };
