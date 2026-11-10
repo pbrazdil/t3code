@@ -49,6 +49,7 @@ import {
   INBOX_REFRESH_MS,
   loadInboxPage,
   publishNewestInboxMessages,
+  useNewestInboxMessages,
 } from "./inboxFeed";
 import { InboxEnvironmentIcon } from "./InboxEnvironmentIcon";
 import { InboxTasksWidget, MessageTaskMenu } from "./InboxTasks";
@@ -459,6 +460,19 @@ function EnvironmentSwitcher({
   selected: string | null;
   onSelect: (environment: string | null) => void;
 }) {
+  const local = useInboxLocalState();
+  // Unread among the newest page across all chats, the same one the sidebar counts.
+  const unread = (useNewestInboxMessages() ?? []).filter((message) =>
+    isInboxMessageUnread(local, message),
+  );
+  const count = (channelId: string | null) => {
+    const found = unread.filter(
+      (message) => channelId === null || message.channelId === channelId,
+    ).length;
+    return found > 0 ? (
+      <span className="ml-auto pl-4 text-xs text-muted-foreground tabular-nums">{found}</span>
+    ) : null;
+  };
   return (
     <Menu>
       <MenuTrigger
@@ -472,13 +486,17 @@ function EnvironmentSwitcher({
           onValueChange={(value: string) => onSelect(value === ALL_ENVIRONMENTS ? null : value)}
         >
           <MenuRadioItem value={ALL_ENVIRONMENTS} closeOnClick>
-            All environments
+            <span className="flex items-center gap-2">
+              All environments
+              {count(null)}
+            </span>
           </MenuRadioItem>
           {channels.map((candidate) => (
             <MenuRadioItem key={candidate.id} value={candidate.id} closeOnClick>
               <span className="flex items-center gap-2">
                 <InboxEnvironmentIcon channel={candidate} />
                 {candidate.label}
+                {count(candidate.id)}
               </span>
             </MenuRadioItem>
           ))}
