@@ -44,12 +44,7 @@ import {
 } from "../WorkspaceBreadcrumb";
 import { WorkspacePageContainer } from "../WorkspacePageContainer";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
-import {
-  INBOX_PAGE_SIZE,
-  INBOX_REFRESH_MS,
-  loadInboxPage,
-  useNewestInboxMessages,
-} from "./inboxFeed";
+import { INBOX_PAGE_SIZE, INBOX_REFRESH_MS, loadInboxPage, useInboxUnreadLabel } from "./inboxFeed";
 import { InboxEnvironmentIcon } from "./InboxEnvironmentIcon";
 import { InboxTasksWidget, MessageTaskMenu } from "./InboxTasks";
 import { useInboxTasks } from "./inboxTaskStore";
@@ -459,17 +454,11 @@ function EnvironmentSwitcher({
   selected: string | null;
   onSelect: (environment: string | null) => void;
 }) {
-  const local = useInboxLocalState();
-  // Unread among each environment's newest page, the same messages the sidebar counts.
-  const unread = (useNewestInboxMessages() ?? []).filter((message) =>
-    isInboxMessageUnread(local, message),
-  );
+  const unreadLabel = useInboxUnreadLabel();
   const count = (channelId: string | null) => {
-    const found = unread.filter(
-      (message) => channelId === null || message.channelId === channelId,
-    ).length;
-    return found > 0 ? (
-      <span className="ml-auto pl-4 text-xs text-muted-foreground tabular-nums">{found}</span>
+    const label = unreadLabel(channelId);
+    return label ? (
+      <span className="ml-auto pl-4 text-xs text-muted-foreground tabular-nums">{label}</span>
     ) : null;
   };
   return (

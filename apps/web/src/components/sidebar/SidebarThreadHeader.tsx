@@ -9,29 +9,22 @@ import {
 } from "react";
 
 import { cn } from "~/lib/utils";
-import { useNewestInboxMessages } from "../inbox/inboxFeed";
-import {
-  isInboxEnvironmentShown,
-  isInboxMessageUnread,
-  useInboxLocalState,
-} from "../inbox/inboxLocalState";
+import { useInboxUnreadLabel } from "../inbox/inboxFeed";
+import { useInboxLocalState } from "../inbox/inboxLocalState";
 import { SidebarMenuButton, useSidebar } from "../ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
-/** Unread messages on each environment's newest Inbox page; "+" when all of them are unread. */
+/** Unread Inbox messages of the shown environments. */
 function InboxUnreadCount() {
-  const newest = useNewestInboxMessages();
   const local = useInboxLocalState();
-  const shown = newest?.filter((message) => isInboxEnvironmentShown(local, message.channelId));
-  const count = shown?.filter((message) => isInboxMessageUnread(local, message)).length ?? 0;
-  if (!shown || count === 0) return null;
+  const label = useInboxUnreadLabel()(local.environment);
+  if (label === null) return null;
   return (
     <span
-      aria-label={`${count} unread`}
+      aria-label={`${label} unread`}
       className="ml-auto rounded-full bg-primary/15 px-1.5 text-xs font-medium text-primary tabular-nums"
     >
-      {count}
-      {count === shown.length ? "+" : ""}
+      {label}
     </span>
   );
 }

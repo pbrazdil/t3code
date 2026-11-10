@@ -5,6 +5,7 @@ import type {
 } from "@t3tools/contracts";
 import { useSyncExternalStore } from "react";
 
+import { isInboxMessageUnread, useInboxLocalState } from "./inboxLocalState";
 import { sampleInboxPage } from "./inboxStaticData";
 
 export const INBOX_PAGE_SIZE = 50;
@@ -59,6 +60,28 @@ function subscribe(listener: () => void) {
   };
 }
 
-export function useNewestInboxMessages() {
-  return useSyncExternalStore(subscribe, () => newest);
+/**
+ * Counts unread messages of one environment, or of all for `null`: "12", or "50+" when the
+ * loaded page ends in an unread message and older ones may be unread too.
+ */
+export function useInboxUnreadLabel() {
+  const messages = useSyncExternalStore(subscribe, () => newest);
+  const local = useInboxLocalState();
+  return (environment: string | null) => {
+    const byChannel = new Map<string, Array<DesktopInboxMessage>>();
+    for (const message of messages ?? []) {
+      if (environment !== null && message.channelId !== environment) continue;
+      const list = byChannel.get(message.channelId);
+      if (list) list.push(message);
+      else byChannel.set(message.channelId, [message]);
+    }
+    let count = 0;
+    let more = false;
+    for (const page of byChannel.values()) {
+      count += page.filter((message) => isInboxMessageUnread(local, message)).length;
+      // Newest first, so the last row is the oldest one loaded.
+      if (page.length >= INBOX_PAGE_SIZE && isInboxMessageUnread(local, page.at(-1)!)) more = true;
+    }
+    return count === 0 ? null : `${count}${more ? "+" : ""}`;
+  };
 }
