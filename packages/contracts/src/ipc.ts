@@ -411,6 +411,18 @@ export const DesktopInboxTaskSchema = Schema.Struct({
       receivedAt: Schema.String,
     }),
   ),
+  /** Threads started for the task; `tokens` is the usage last seen for each. */
+  threads: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        environmentId: Schema.String,
+        threadId: Schema.String,
+        draftId: Schema.String,
+        tokens: Schema.Number,
+        createdAt: Schema.String,
+      }),
+    ),
+  ),
   createdAt: Schema.String,
 });
 export type DesktopInboxTask = typeof DesktopInboxTaskSchema.Type;

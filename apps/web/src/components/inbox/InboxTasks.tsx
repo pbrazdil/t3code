@@ -1,14 +1,26 @@
+import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import type {
   DesktopInboxChannel,
   DesktopInboxMessage,
   DesktopInboxTask,
   DesktopInboxTaskStatus,
 } from "@t3tools/contracts";
+import { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import { Link } from "@tanstack/react-router";
-import { CircleCheckIcon, CircleDotIcon, CircleIcon, ListPlusIcon, XIcon } from "lucide-react";
-import { useState, type CSSProperties, type FormEvent } from "react";
+import {
+  CircleCheckIcon,
+  CircleDotIcon,
+  CircleIcon,
+  ListPlusIcon,
+  PlusIcon,
+  XIcon,
+} from "lucide-react";
+import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
 
 import { cn } from "~/lib/utils";
+import { useNewThreadHandler } from "../../hooks/useHandleNewThread";
+import { useProjects, useQuietThreadProjection, useQuietThreadShell } from "../../state/entities";
+import { buildThreadRouteParams } from "../../threadRoutes";
 import { PullRequestGlyph } from "../pullRequest/pullRequestIcons";
 import { Button } from "../ui/button";
 import {
@@ -31,8 +43,11 @@ import {
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import { InboxEnvironmentIcon } from "./InboxEnvironmentIcon";
 import {
+  addInboxTaskThread,
   createInboxTask,
   deleteInboxTask,
+  recordInboxTaskThreadTokens,
+  removeInboxTaskThread,
   toggleInboxTaskMessage,
   updateInboxTask,
   useInboxTasks,
@@ -94,7 +109,152 @@ function PullRequestLink({ url }: { url: string }) {
   );
 }
 
-function TaskDialog({ task, onClose }: { task: DesktopInboxTask; onClose: () => void }) {
+type TaskThread = NonNullable<DesktopInboxTask["threads"]>[number];
+
+const TOKEN_FORMAT = new Intl.NumberFormat(undefined, {
+  notation: "compact",
+  maximumFractionDigits: 1,
+});
+
+function taskTokens(task: DesktopInboxTask) {
+  return (task.threads ?? []).reduce((total, thread) => total + thread.tokens, 0);
+}
+
+/** What a new thread about the task starts with. */
+function taskPrompt(task: DesktopInboxTask, channel: DesktopInboxChannel) {
+  return [
+    `Task: ${task.title}`,
+    `Environment: ${channel.label}`,
+    ...(task.messages.length > 0 ? ["", "Linked messages:"] : []),
+    ...task.messages.flatMap((message) => [
+      "",
+      `${message.sender ?? "Unknown"}${message.conversation ? ` in ${message.conversation}` : ""}, ${WHEN_FORMAT.format(new Date(message.receivedAt))}:`,
+      message.text,
+    ]),
+    ...(task.pullRequests.length > 0
+      ? ["", "Pull requests:", ...task.pullRequests.map((url) => `- ${url}`)]
+      : []),
+    "",
+  ].join("\n");
+}
+
+function StartThreadButton({
+  task,
+  channel,
+}: {
+  task: DesktopInboxTask;
+  channel: DesktopInboxChannel;
+}) {
+  const projects = useProjects().filter((project) => project.archivedAt === null);
+  const handleNewThread = useNewThreadHandler();
+  // The environment's own project, when one carries its name.
+  const matched = projects.filter(
+    (project) => project.title.toLowerCase() === channel.label.toLowerCase(),
+  );
+  const start = async (project: (typeof projects)[number]) => {
+    const created = await handleNewThread(scopeProjectRef(project.environmentId, project.id), {
+      prompt: taskPrompt(task, channel),
+    });
+    if (!created) return;
+    addInboxTaskThread(task.id, {
+      environmentId: project.environmentId,
+      threadId: created.threadId,
+      draftId: created.draftId,
+    });
+  };
+  if (matched.length === 1) {
+    return (
+      <Button variant="outline" size="xs" onClick={() => void start(matched[0]!)}>
+        <PlusIcon aria-hidden />
+        Start thread
+      </Button>
+    );
+  }
+  return (
+    <Menu>
+      <MenuTrigger render={<Button variant="outline" size="xs" />}>
+        <PlusIcon aria-hidden />
+        Start thread
+      </MenuTrigger>
+      <MenuPopup align="end">
+        {projects.map((project) => (
+          <MenuItem
+            key={`${project.environmentId}:${project.id}`}
+            onClick={() => void start(project)}
+          >
+            {project.title}
+          </MenuItem>
+        ))}
+      </MenuPopup>
+    </Menu>
+  );
+}
+
+function TaskThreadRow({ task, thread }: { task: DesktopInboxTask; thread: TaskThread }) {
+  const ref = scopeThreadRef(
+    EnvironmentId.make(thread.environmentId),
+    ThreadId.make(thread.threadId),
+  );
+  const shell = useQuietThreadShell(ref);
+  const structure = useQuietThreadProjection(ref);
+  const tokens = structure
+    ? structure.projection.providerTurns.reduce(
+        (total, turn) =>
+          total +
+          (turn.turnTokenUsage?.inputTokens ?? 0) +
+          (turn.turnTokenUsage?.outputTokens ?? 0) +
+          (turn.turnTokenUsage?.otherUsage?.inputTokens ?? 0) +
+          (turn.turnTokenUsage?.otherUsage?.outputTokens ?? 0),
+        0,
+      )
+    : thread.tokens;
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- stores the usage on the task file, so the total shows without loading every thread
+  useEffect(() => {
+    if (tokens !== thread.tokens) recordInboxTaskThreadTokens(task.id, thread.threadId, tokens);
+  }, [task.id, thread.threadId, thread.tokens, tokens]);
+  return (
+    <div className="flex items-center gap-2 text-sm">
+      {shell === null ? (
+        <Link
+          to="/draft/$draftId"
+          params={{ draftId: thread.draftId }}
+          className="min-w-0 flex-1 truncate text-muted-foreground hover:underline"
+        >
+          Draft, not sent yet
+        </Link>
+      ) : (
+        <Link
+          to="/$environmentId/$threadId"
+          params={buildThreadRouteParams(ref)}
+          className="min-w-0 flex-1 truncate hover:underline"
+        >
+          {shell.title}
+        </Link>
+      )}
+      <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+        {TOKEN_FORMAT.format(tokens)} tokens
+      </span>
+      <Button
+        variant="ghost-muted"
+        size="icon-xs"
+        aria-label="Unlink thread"
+        onClick={() => removeInboxTaskThread(task.id, thread.threadId)}
+      >
+        <XIcon aria-hidden />
+      </Button>
+    </div>
+  );
+}
+
+function TaskDialog({
+  task,
+  channel,
+  onClose,
+}: {
+  task: DesktopInboxTask;
+  channel: DesktopInboxChannel;
+  onClose: () => void;
+}) {
   return (
     <Dialog
       open
@@ -134,6 +294,20 @@ function TaskDialog({ task, onClose }: { task: DesktopInboxTask; onClose: () => 
                 <Toggle value="done">{STATUS_LABEL.done}</Toggle>
               </ToggleGroup>
             </form>
+            <section className="flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <h3 className="m-0 flex-1 text-xs font-medium text-muted-foreground">
+                  Threads
+                  {task.threads?.length
+                    ? ` · ${TOKEN_FORMAT.format(taskTokens(task))} tokens in total`
+                    : ""}
+                </h3>
+                <StartThreadButton task={task} channel={channel} />
+              </div>
+              {(task.threads ?? []).map((thread) => (
+                <TaskThreadRow key={thread.threadId} task={task} thread={thread} />
+              ))}
+            </section>
             <section className="flex flex-col gap-2">
               <h3 className="m-0 text-xs font-medium text-muted-foreground">Pull requests</h3>
               {task.pullRequests.map((url) => (
@@ -250,7 +424,7 @@ function TaskDialog({ task, onClose }: { task: DesktopInboxTask; onClose: () => 
   );
 }
 
-function TaskRow({ task }: { task: DesktopInboxTask }) {
+function TaskRow({ task, channel }: { task: DesktopInboxTask; channel: DesktopInboxChannel }) {
   const [open, setOpen] = useState(false);
   const done = task.status === "done";
   return (
@@ -276,6 +450,12 @@ function TaskRow({ task }: { task: DesktopInboxTask }) {
           >
             {task.title}
           </button>
+          {task.threads?.length ? (
+            <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+              {task.threads.length} {task.threads.length === 1 ? "thread" : "threads"} ·{" "}
+              {TOKEN_FORMAT.format(taskTokens(task))} tokens
+            </span>
+          ) : null}
           <span className="shrink-0 text-xs text-muted-foreground">
             {STATUS_LABEL[task.status]}
           </span>
@@ -305,7 +485,7 @@ function TaskRow({ task }: { task: DesktopInboxTask }) {
           </>
         )}
       </div>
-      {open ? <TaskDialog task={task} onClose={() => setOpen(false)} /> : null}
+      {open ? <TaskDialog task={task} channel={channel} onClose={() => setOpen(false)} /> : null}
     </li>
   );
 }
@@ -353,7 +533,7 @@ export function InboxTasksWidget({
                   a.createdAt.localeCompare(b.createdAt),
               )
               .map((task) => (
-                <TaskRow key={task.id} task={task} />
+                <TaskRow key={task.id} task={task} channel={channel} />
               ))}
           </ul>
           <form

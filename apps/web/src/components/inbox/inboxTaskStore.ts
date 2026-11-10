@@ -121,3 +121,44 @@ export function toggleInboxTaskMessage(task: DesktopInboxTask, message: DesktopI
       : [...task.messages, linkedMessage(message)],
   });
 }
+
+type TaskThread = NonNullable<DesktopInboxTask["threads"]>[number];
+
+/** Changes one task as it is stored now; a caller's copy may be stale after navigation. */
+function changeTask(taskId: string, change: (task: DesktopInboxTask) => DesktopInboxTask) {
+  const task = state.tasks.find((existing) => existing.id === taskId);
+  if (task) updateInboxTask(change(task));
+}
+
+export function addInboxTaskThread(
+  taskId: string,
+  thread: Omit<TaskThread, "tokens" | "createdAt">,
+) {
+  changeTask(taskId, (task) =>
+    task.threads?.some((existing) => existing.threadId === thread.threadId)
+      ? task
+      : {
+          ...task,
+          threads: [
+            ...(task.threads ?? []),
+            { ...thread, tokens: 0, createdAt: new Date().toISOString() },
+          ],
+        },
+  );
+}
+
+export function removeInboxTaskThread(taskId: string, threadId: string) {
+  changeTask(taskId, (task) => ({
+    ...task,
+    threads: (task.threads ?? []).filter((existing) => existing.threadId !== threadId),
+  }));
+}
+
+export function recordInboxTaskThreadTokens(taskId: string, threadId: string, tokens: number) {
+  changeTask(taskId, (task) => ({
+    ...task,
+    threads: (task.threads ?? []).map((existing) =>
+      existing.threadId === threadId ? { ...existing, tokens } : existing,
+    ),
+  }));
+}
