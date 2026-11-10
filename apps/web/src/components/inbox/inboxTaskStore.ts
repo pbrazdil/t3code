@@ -5,8 +5,6 @@ import { randomUUID } from "~/lib/utils";
 
 type TaskMessage = DesktopInboxTask["messages"][number];
 
-const EXCERPT_LENGTH = 200;
-
 // Matches INBOX_DEV_PATH in vite/inboxDev.ts; a browser has no desktop bridge.
 async function devRequest(path: string, body: unknown) {
   const response = await fetch(`/__garden/inbox${path}`, {
@@ -71,13 +69,13 @@ function commit(environmentId: string, tasks: ReadonlyArray<DesktopInboxTask>) {
     .catch((error: unknown) => publish({ ...state, error: messageOf(error) }));
 }
 
-function excerpt(message: DesktopInboxMessage): TaskMessage {
+function linkedMessage(message: DesktopInboxMessage): TaskMessage {
   return {
     id: message.id,
     conversationId: message.conversationId,
     conversation: message.conversation,
     sender: message.sender,
-    text: message.text.slice(0, EXCERPT_LENGTH) || (message.media?.label ?? ""),
+    text: message.text || (message.media?.label ?? ""),
     receivedAt: message.receivedAt,
   };
 }
@@ -93,7 +91,7 @@ export function createInboxTask(
     title,
     status: "todo",
     pullRequests: [],
-    messages: message ? [excerpt(message)] : [],
+    messages: message ? [linkedMessage(message)] : [],
     createdAt: new Date().toISOString(),
   };
   commit(environmentId, [...state.tasks, task]);
@@ -120,6 +118,6 @@ export function toggleInboxTaskMessage(task: DesktopInboxTask, message: DesktopI
     ...task,
     messages: linked
       ? task.messages.filter((existing) => existing.id !== message.id)
-      : [...task.messages, excerpt(message)],
+      : [...task.messages, linkedMessage(message)],
   });
 }

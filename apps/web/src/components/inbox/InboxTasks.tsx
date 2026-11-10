@@ -209,7 +209,9 @@ function TaskDialog({ task, onClose }: { task: DesktopInboxTask; onClose: () => 
                         {WHEN_FORMAT.format(new Date(message.receivedAt))}
                       </time>
                     </div>
-                    <p className="m-0 text-sm wrap-anywhere whitespace-pre-wrap">{message.text}</p>
+                    <p className="m-0 max-h-80 overflow-y-auto text-sm wrap-anywhere whitespace-pre-wrap">
+                      {message.text}
+                    </p>
                   </div>
                   <Button
                     variant="ghost-muted"

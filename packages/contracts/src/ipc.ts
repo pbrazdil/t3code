@@ -400,7 +400,7 @@ export const DesktopInboxTaskSchema = Schema.Struct({
   status: DesktopInboxTaskStatusSchema,
   /** Pull request URLs. */
   pullRequests: Schema.Array(Schema.String),
-  /** Inbox messages linked to the task, kept as excerpts so they outlive the feed. */
+  /** Inbox messages linked to the task, copied so they outlive the feed. */
   messages: Schema.Array(
     Schema.Struct({
       id: Schema.String,
