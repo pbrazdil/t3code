@@ -845,7 +845,7 @@ export function InboxPage({ search }: { search: InboxSearch }) {
               ))}
             </WorkspacePageContainer>
           </div>
-          <aside className="hidden w-80 shrink-0 flex-col gap-4 overflow-y-auto border-l px-4 py-6 xl:flex">
+          <aside className="hidden w-1/2 shrink-0 flex-col gap-4 overflow-y-auto border-l px-4 py-6 lg:flex">
             <InboxTasksWidget channels={inbox.channels} environment={local.environment} />
           </aside>
         </div>

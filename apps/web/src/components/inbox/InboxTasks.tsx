@@ -5,19 +5,20 @@ import type {
   DesktopInboxTaskStatus,
 } from "@t3tools/contracts";
 import { Link } from "@tanstack/react-router";
-import {
-  CircleCheckIcon,
-  CircleDotIcon,
-  CircleIcon,
-  ListPlusIcon,
-  MessageSquareIcon,
-  XIcon,
-} from "lucide-react";
+import { CircleCheckIcon, CircleDotIcon, CircleIcon, ListPlusIcon, XIcon } from "lucide-react";
 import { useState, type CSSProperties, type FormEvent } from "react";
 
 import { cn } from "~/lib/utils";
 import { PullRequestGlyph } from "../pullRequest/pullRequestIcons";
 import { Button } from "../ui/button";
+import {
+  Dialog,
+  DialogFooter,
+  DialogHeader,
+  DialogPanel,
+  DialogPopup,
+  DialogTitle,
+} from "../ui/dialog";
 import { Input } from "../ui/input";
 import {
   Menu,
@@ -27,6 +28,7 @@ import {
   MenuSeparator,
   MenuTrigger,
 } from "../ui/menu";
+import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import {
   createInboxTask,
   deleteInboxTask,
@@ -70,139 +72,237 @@ function StatusIcon({ status }: { status: DesktopInboxTaskStatus }) {
   return <CircleIcon aria-hidden />;
 }
 
+const WHEN_FORMAT = new Intl.DateTimeFormat(undefined, {
+  month: "short",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+function PullRequestLink({ url }: { url: string }) {
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex min-w-0 items-center gap-1 hover:underline"
+    >
+      <PullRequestGlyph.pullRequest aria-hidden className="size-3 shrink-0 text-muted-foreground" />
+      <span className="min-w-0 truncate">{pullRequestLabel(url)}</span>
+    </a>
+  );
+}
+
+function TaskDialog({ task, onClose }: { task: DesktopInboxTask; onClose: () => void }) {
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogPopup className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Task</DialogTitle>
+        </DialogHeader>
+        <DialogPanel>
+          <div className="flex flex-col gap-5">
+            <form
+              className="flex items-center gap-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const title = String(new FormData(event.currentTarget).get("value") ?? "").trim();
+                if (title) updateInboxTask({ ...task, title });
+              }}
+              onBlur={(event) => {
+                const title = String(new FormData(event.currentTarget).get("value") ?? "").trim();
+                if (title && title !== task.title) updateInboxTask({ ...task, title });
+              }}
+            >
+              <Input name="value" aria-label="Task title" defaultValue={task.title} />
+              <ToggleGroup
+                aria-label="Status"
+                value={[task.status]}
+                onValueChange={(next) => {
+                  const status = next[0] as DesktopInboxTaskStatus | undefined;
+                  if (status) updateInboxTask({ ...task, status });
+                }}
+              >
+                <Toggle value="todo">{STATUS_LABEL.todo}</Toggle>
+                <Toggle value="in-progress">{STATUS_LABEL["in-progress"]}</Toggle>
+                <Toggle value="done">{STATUS_LABEL.done}</Toggle>
+              </ToggleGroup>
+            </form>
+            <section className="flex flex-col gap-2">
+              <h3 className="m-0 text-xs font-medium text-muted-foreground">Pull requests</h3>
+              {task.pullRequests.map((url) => (
+                <div key={url} className="flex items-center gap-2 text-sm">
+                  <span className="min-w-0 flex-1">
+                    <PullRequestLink url={url} />
+                  </span>
+                  <Button
+                    variant="ghost-muted"
+                    size="icon-xs"
+                    aria-label={`Remove ${pullRequestLabel(url)}`}
+                    onClick={() =>
+                      updateInboxTask({
+                        ...task,
+                        pullRequests: task.pullRequests.filter((existing) => existing !== url),
+                      })
+                    }
+                  >
+                    <XIcon aria-hidden />
+                  </Button>
+                </div>
+              ))}
+              <form
+                onSubmit={(event) => {
+                  const url = takeField(event);
+                  if (/^https?:\/\//.test(url) && !task.pullRequests.includes(url)) {
+                    updateInboxTask({ ...task, pullRequests: [...task.pullRequests, url] });
+                  }
+                }}
+              >
+                <Input
+                  name="value"
+                  size="sm"
+                  aria-label="Pull request link"
+                  placeholder="Paste a PR link and press Enter"
+                />
+              </form>
+            </section>
+            <section className="flex flex-col gap-2">
+              <h3 className="m-0 text-xs font-medium text-muted-foreground">Messages</h3>
+              {task.messages.length === 0 ? (
+                <p className="m-0 text-sm text-muted-foreground">
+                  Link messages from the Inbox with the button next to their star.
+                </p>
+              ) : null}
+              {task.messages.map((message) => (
+                <div
+                  key={message.id}
+                  className="flex items-start gap-2 rounded-lg bg-muted px-3 py-2"
+                >
+                  <div className="flex min-w-0 flex-1 flex-col gap-1">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <span className="min-w-0 truncate font-medium text-foreground">
+                        {message.sender ?? "Unknown"}
+                      </span>
+                      {message.conversationId === null ? (
+                        <span className="min-w-0 truncate">{message.conversation}</span>
+                      ) : (
+                        <Link
+                          to="/inbox"
+                          search={{
+                            channel: task.environmentId,
+                            chat: message.conversationId,
+                            filter: "all",
+                          }}
+                          onClick={onClose}
+                          className="min-w-0 truncate hover:underline"
+                        >
+                          {message.conversation ?? "Open chat"}
+                        </Link>
+                      )}
+                      <time dateTime={message.receivedAt} className="shrink-0 tabular-nums">
+                        {WHEN_FORMAT.format(new Date(message.receivedAt))}
+                      </time>
+                    </div>
+                    <p className="m-0 text-sm wrap-anywhere whitespace-pre-wrap">{message.text}</p>
+                  </div>
+                  <Button
+                    variant="ghost-muted"
+                    size="icon-xs"
+                    aria-label="Unlink message"
+                    onClick={() =>
+                      updateInboxTask({
+                        ...task,
+                        messages: task.messages.filter((existing) => existing.id !== message.id),
+                      })
+                    }
+                  >
+                    <XIcon aria-hidden />
+                  </Button>
+                </div>
+              ))}
+            </section>
+          </div>
+        </DialogPanel>
+        <DialogFooter>
+          <Button
+            variant="destructive-outline"
+            onClick={() => {
+              onClose();
+              deleteInboxTask(task);
+            }}
+          >
+            Delete task
+          </Button>
+          <Button variant="outline" onClick={onClose}>
+            Close
+          </Button>
+        </DialogFooter>
+      </DialogPopup>
+    </Dialog>
+  );
+}
+
 function TaskRow({ task }: { task: DesktopInboxTask }) {
   const [open, setOpen] = useState(false);
+  const done = task.status === "done";
   return (
-    <li className="flex flex-col gap-1.5">
-      <div className="flex items-center gap-1.5">
-        <Button
-          variant="ghost-muted"
-          size="icon-xs"
-          aria-label={`${STATUS_LABEL[task.status]}: change status of ${task.title}`}
-          onClick={() => updateInboxTask({ ...task, status: NEXT_STATUS[task.status] })}
-        >
-          <StatusIcon status={task.status} />
-        </Button>
-        <button
-          type="button"
-          aria-expanded={open}
-          onClick={() => setOpen(!open)}
-          className={cn(
-            "min-w-0 flex-1 cursor-pointer truncate rounded-sm text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
-            task.status === "done" && "text-muted-foreground line-through",
-          )}
-        >
-          {task.title}
-        </button>
-        {task.messages.length > 0 ? (
-          <span className="flex shrink-0 items-center gap-0.5 text-xs text-muted-foreground tabular-nums">
-            <MessageSquareIcon aria-hidden className="size-3" />
-            {task.messages.length}
-          </span>
-        ) : null}
-        {task.pullRequests.length > 0 ? (
-          <span className="flex shrink-0 items-center gap-0.5 text-xs text-muted-foreground tabular-nums">
-            <PullRequestGlyph.pullRequest aria-hidden className="size-3" />
-            {task.pullRequests.length}
-          </span>
-        ) : null}
-      </div>
-      {open ? (
-        <div className="flex flex-col gap-1.5 pb-2 pl-7 text-xs">
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              const title = String(new FormData(event.currentTarget).get("value") ?? "").trim();
-              if (title) updateInboxTask({ ...task, title });
-            }}
+    <li className="flex items-start gap-1.5 border-t py-2 first:border-t-0">
+      <Button
+        variant="ghost-muted"
+        size="icon-xs"
+        aria-label={`${STATUS_LABEL[task.status]}: change status of ${task.title}`}
+        onClick={() => updateInboxTask({ ...task, status: NEXT_STATUS[task.status] })}
+      >
+        <StatusIcon status={task.status} />
+      </Button>
+      <div className="flex min-w-0 flex-1 flex-col gap-1.5 pt-0.5">
+        <div className="flex items-baseline gap-2">
+          <button
+            type="button"
+            aria-haspopup="dialog"
+            onClick={() => setOpen(true)}
+            className={cn(
+              "min-w-0 flex-1 cursor-pointer rounded-sm text-left text-sm font-medium wrap-anywhere outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+              done && "text-muted-foreground line-through",
+            )}
           >
-            <Input name="value" size="compact" aria-label="Task title" defaultValue={task.title} />
-          </form>
-          {task.messages.map((message) => (
-            <div key={message.id} className="flex items-center gap-1">
-              <MessageSquareIcon aria-hidden className="size-3 shrink-0 text-muted-foreground" />
-              {message.conversationId === null ? (
-                <span className="min-w-0 flex-1 truncate">{message.text}</span>
-              ) : (
-                <Link
-                  to="/inbox"
-                  search={{
-                    channel: task.environmentId,
-                    chat: message.conversationId,
-                    filter: "all",
-                  }}
-                  className="min-w-0 flex-1 truncate hover:underline"
-                >
-                  {message.sender ? `${message.sender}: ` : ""}
-                  {message.text}
-                </Link>
-              )}
-              <Button
-                variant="ghost-muted"
-                size="icon-xs"
-                aria-label="Unlink message"
-                onClick={() =>
-                  updateInboxTask({
-                    ...task,
-                    messages: task.messages.filter((existing) => existing.id !== message.id),
-                  })
-                }
-              >
-                <XIcon aria-hidden />
-              </Button>
-            </div>
-          ))}
-          {task.pullRequests.map((url) => (
-            <div key={url} className="flex items-center gap-1">
-              <PullRequestGlyph.pullRequest
-                aria-hidden
-                className="size-3 shrink-0 text-muted-foreground"
-              />
-              <a
-                href={url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="min-w-0 flex-1 truncate hover:underline"
-              >
-                {pullRequestLabel(url)}
-              </a>
-              <Button
-                variant="ghost-muted"
-                size="icon-xs"
-                aria-label={`Remove ${pullRequestLabel(url)}`}
-                onClick={() =>
-                  updateInboxTask({
-                    ...task,
-                    pullRequests: task.pullRequests.filter((existing) => existing !== url),
-                  })
-                }
-              >
-                <XIcon aria-hidden />
-              </Button>
-            </div>
-          ))}
-          <form
-            onSubmit={(event) => {
-              const url = takeField(event);
-              if (/^https?:\/\//.test(url) && !task.pullRequests.includes(url)) {
-                updateInboxTask({ ...task, pullRequests: [...task.pullRequests, url] });
-              }
-            }}
-          >
-            <Input
-              name="value"
-              size="compact"
-              aria-label="Pull request link"
-              placeholder="Paste a PR link"
-            />
-          </form>
-          <div className="flex justify-end">
-            <Button variant="ghost-muted" size="xs" onClick={() => deleteInboxTask(task)}>
-              Delete task
-            </Button>
-          </div>
+            {task.title}
+          </button>
+          <span className="shrink-0 text-xs text-muted-foreground">
+            {STATUS_LABEL[task.status]}
+          </span>
         </div>
-      ) : null}
+        {done ? null : (
+          <>
+            {task.pullRequests.length > 0 ? (
+              <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                {task.pullRequests.map((url) => (
+                  <PullRequestLink key={url} url={url} />
+                ))}
+              </div>
+            ) : null}
+            {task.messages.map((message) => (
+              <p
+                key={message.id}
+                className="m-0 line-clamp-2 border-l-2 pl-2 text-xs text-muted-foreground wrap-anywhere"
+              >
+                <span className="font-medium text-foreground">{message.sender ?? "Unknown"}</span>
+                {message.conversation && message.conversation !== message.sender
+                  ? ` in ${message.conversation}`
+                  : ""}
+                {": "}
+                {message.text}
+              </p>
+            ))}
+          </>
+        )}
+      </div>
+      {open ? <TaskDialog task={task} onClose={() => setOpen(false)} /> : null}
     </li>
   );
 }
