@@ -694,11 +694,7 @@ export function InboxPage({ search }: { search: InboxSearch }) {
             ) : null}
             {conversation === null ? (
               <EnvironmentFilter channels={inbox.channels} selected={local.environment} />
-            ) : (
-              inbox.channels.map((channel) => (
-                <EnvironmentBadge key={channel.id} channel={channel} />
-              ))
-            )}
+            ) : null}
           </div>
         </WorkspacePageHeader>
 
