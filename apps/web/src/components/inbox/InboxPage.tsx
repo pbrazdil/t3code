@@ -61,7 +61,8 @@ const TIME_FORMAT = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute
 export interface InboxSearch {
   readonly channel?: string;
   readonly chat?: string;
-  readonly filter?: "unread" | "starred";
+  /** Absent means unread, the list the Inbox opens with. */
+  readonly filter?: "all" | "starred";
 }
 
 interface InboxState {
@@ -373,7 +374,7 @@ export function InboxPage({ search }: { search: InboxSearch }) {
       ? { channelId: search.channel, conversationId: search.chat }
       : null;
   const cacheKey = conversation ? `${conversation.channelId}:${conversation.conversationId}` : "";
-  const filter = search.filter ?? "all";
+  const filter = search.filter ?? "unread";
   const scrollKey = `${cacheKey}|${filter}`;
   const navigate = useNavigate();
   const local = useInboxLocalState();
@@ -543,8 +544,8 @@ export function InboxPage({ search }: { search: InboxSearch }) {
   const groups = groupByConversation(shown);
 
   const showFilter = (next: string) => {
-    const nextFilter = next === "unread" || next === "starred" ? next : undefined;
-    anchorRef.current = inboxScroll.get(`${cacheKey}|${nextFilter ?? "all"}`) ?? "bottom";
+    const nextFilter = next === "all" || next === "starred" ? next : undefined;
+    anchorRef.current = inboxScroll.get(`${cacheKey}|${nextFilter ?? "unread"}`) ?? "bottom";
     setSearchPaused(false);
     void navigate({
       to: "/inbox",
@@ -592,8 +593,8 @@ export function InboxPage({ search }: { search: InboxSearch }) {
               if (next[0]) showFilter(next[0]);
             }}
           >
-            <Toggle value="all">All</Toggle>
             <Toggle value="unread">Unread</Toggle>
+            <Toggle value="all">All</Toggle>
             <Toggle value="starred">Starred</Toggle>
           </ToggleGroup>
           <div className="flex shrink-0 items-center gap-2">
@@ -677,7 +678,11 @@ export function InboxPage({ search }: { search: InboxSearch }) {
                         {group.conversationId !== null ? (
                           <Link
                             to="/inbox"
-                            search={{ channel: group.channelId, chat: group.conversationId }}
+                            search={{
+                              channel: group.channelId,
+                              chat: group.conversationId,
+                              filter: "all",
+                            }}
                             className="min-w-0 truncate text-sm font-semibold underline-offset-2 hover:underline"
                           >
                             {name}

@@ -8,7 +8,7 @@ export const Route = createFileRoute("/_chat/inbox")({
     (typeof raw.chat === "string" || typeof raw.chat === "number")
       ? { channel: String(raw.channel), chat: String(raw.chat) }
       : {}),
-    ...(raw.filter === "unread" || raw.filter === "starred" ? { filter: raw.filter } : {}),
+    ...(raw.filter === "all" || raw.filter === "starred" ? { filter: raw.filter } : {}),
   }),
   component: InboxRoute,
 });
