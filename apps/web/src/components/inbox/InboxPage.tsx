@@ -2,7 +2,6 @@ import type {
   DesktopInboxChannel,
   DesktopInboxMessage,
   DesktopInboxPage,
-  DesktopInboxPageInput,
 } from "@t3tools/contracts";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
@@ -38,14 +37,18 @@ import {
 import { WorkspacePageContainer } from "../WorkspacePageContainer";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
 import {
+  INBOX_PAGE_SIZE,
+  INBOX_REFRESH_MS,
+  loadInboxPage,
+  publishNewestInboxMessages,
+} from "./inboxFeed";
+import {
   isInboxMessageUnread,
   setInboxMessagesRead,
   toggleInboxMessageStar,
   useInboxLocalState,
 } from "./inboxLocalState";
-import { sampleInboxPage } from "./inboxStaticData";
 
-const PAGE_SIZE = 50;
 const STICK_TO_BOTTOM_PX = 80;
 
 const CHANNEL_LABEL: Record<string, string> = {
@@ -89,24 +92,6 @@ interface ScrollPosition {
 
 // Where each list was left when scrolled away from the newest message, to return there.
 const inboxScroll = new Map<string, ScrollPosition>();
-
-// Matches INBOX_DEV_PATH in vite/inboxDev.ts: the dev server reads the channels for a browser.
-async function loadDevInboxPage(input: DesktopInboxPageInput) {
-  const response = await fetch("/__garden/inbox", { method: "POST", body: JSON.stringify(input) });
-  if (!response.ok) throw new Error(`Inbox dev server: ${response.status}`);
-  return (await response.json()) as DesktopInboxPage;
-}
-
-async function loadInboxPage(input: DesktopInboxPageInput) {
-  const live = window.desktopBridge
-    ? await window.desktopBridge.inbox.loadPage(input)
-    : import.meta.env.DEV
-      ? await loadDevInboxPage(input)
-      : undefined;
-  return live && live.channels.length > 0
-    ? { page: live, sample: false }
-    : { page: sampleInboxPage(input), sample: true };
-}
 
 function mergeMessages(
   current: ReadonlyArray<DesktopInboxMessage>,
@@ -213,7 +198,45 @@ function Avatar({
   );
 }
 
-const URL_PATTERN = /(https?:\/\/[^\s<>]+)/;
+// Links, and the inline Markdown that Zulip sends as source: [label](url), **bold**,
+// @**mention** and `code`.
+// A link target may hold brackets two levels deep, as Kibana URLs do.
+const INLINE_PATTERN =
+  /(\[[^\]\n]+\]\(https?:\/\/(?:[^\s()]+|\((?:[^\s()]+|\([^\s()]*\))*\))+\)|https?:\/\/[^\s<>]+|@?\*\*[^*\n]+\*\*|`[^`\n]+`)/;
+const MARKDOWN_LINK = /^\[([^\]]+)\]\((.+)\)$/;
+
+function InlineLink({ href, children }: { href: string; children: string }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-(--label) underline underline-offset-2 hover:no-underline"
+    >
+      {children}
+    </a>
+  );
+}
+
+function InlinePart({ part }: { part: string }) {
+  const link = MARKDOWN_LINK.exec(part);
+  if (link) return <InlineLink href={link[2]!}>{link[1]!}</InlineLink>;
+  if (part.startsWith("http")) return <InlineLink href={part}>{part}</InlineLink>;
+  if (part.startsWith("`")) {
+    return (
+      <code className="rounded-sm bg-background/60 px-1 font-mono text-xs">
+        {part.slice(1, -1)}
+      </code>
+    );
+  }
+  const mention = part.startsWith("@");
+  const text = part.slice(mention ? 3 : 2, -2);
+  // A mention may carry the user id: @**Name|123**.
+  return (
+    <strong className="font-semibold">{mention ? `@${text.replace(/\|\d+$/, "")}` : text}</strong>
+  );
+}
+
 const EMOJI_ONLY = /^[\p{Extended_Pictographic}\p{Emoji_Component}\s]+$/u;
 
 function isEmojiOnly(text: string) {
@@ -221,18 +244,10 @@ function isEmojiOnly(text: string) {
 }
 
 function MessageText({ text }: { text: string }) {
-  return text.split(URL_PATTERN).map((part, index) =>
+  return text.split(INLINE_PATTERN).map((part, index) =>
     index % 2 === 1 ? (
-      <a
-        // oxlint-disable-next-line react/no-array-index-key -- parts of one immutable message text
-        key={index}
-        href={part}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-(--label) underline underline-offset-2 hover:no-underline"
-      >
-        {part}
-      </a>
+      // oxlint-disable-next-line react/no-array-index-key -- parts of one immutable message text
+      <InlinePart key={index} part={part} />
     ) : (
       part
     ),
@@ -406,7 +421,7 @@ export function InboxPage({ search }: { search: InboxSearch }) {
     loadingRef.current = true;
     const before = direction === "older" ? inbox.messages[0]?.receivedAt : undefined;
     const loaded = await loadInboxPage({
-      limit: PAGE_SIZE,
+      limit: INBOX_PAGE_SIZE,
       ...(before ? { before } : {}),
       ...(conversation ? { conversation } : {}),
     }).catch((error: unknown) => (error instanceof Error ? error.message : String(error)));
@@ -420,6 +435,7 @@ export function InboxPage({ search }: { search: InboxSearch }) {
       return;
     }
     const { page, sample } = loaded;
+    if (!before && !conversation && !sample) publishNewestInboxMessages(page.messages);
     const messages = mergeMessages(inbox.messages, page.messages);
     const next: InboxState = {
       channels: page.channels,
@@ -482,7 +498,7 @@ export function InboxPage({ search }: { search: InboxSearch }) {
     }
   });
 
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- IntersectionObserver on the top-of-list sentinel loads older pages; a cached list also refreshes its newest page once
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- IntersectionObserver on the top-of-list sentinel loads older pages, a timer loads new messages; a cached list also refreshes its newest page once
   useEffect(() => {
     const sentinel = sentinelRef.current;
     if (!sentinel) return;
@@ -499,7 +515,11 @@ export function InboxPage({ search }: { search: InboxSearch }) {
     );
     observerRef.current = observer;
     observer.observe(sentinel);
+    const refresh = setInterval(() => {
+      if (!document.hidden) void load("newest");
+    }, INBOX_REFRESH_MS);
     return () => {
+      clearInterval(refresh);
       observer.disconnect();
       observerRef.current = null;
     };

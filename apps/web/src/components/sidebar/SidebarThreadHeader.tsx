@@ -9,8 +9,27 @@ import {
 } from "react";
 
 import { cn } from "~/lib/utils";
+import { useNewestInboxMessages } from "../inbox/inboxFeed";
+import { isInboxMessageUnread, useInboxLocalState } from "../inbox/inboxLocalState";
 import { SidebarMenuButton, useSidebar } from "../ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+
+/** Unread messages on the newest Inbox page; "+" when the whole page is unread. */
+function InboxUnreadCount() {
+  const newest = useNewestInboxMessages();
+  const local = useInboxLocalState();
+  const count = newest?.filter((message) => isInboxMessageUnread(local, message)).length ?? 0;
+  if (!newest || count === 0) return null;
+  return (
+    <span
+      aria-label={`${count} unread`}
+      className="ml-auto rounded-full bg-primary/15 px-1.5 text-xs font-medium text-primary tabular-nums"
+    >
+      {count}
+      {count === newest.length ? "+" : ""}
+    </span>
+  );
+}
 
 export interface SidebarThreadHeaderProps {
   hasProjects: boolean;
@@ -63,6 +82,7 @@ export function SidebarThreadHeader({
       >
         <InboxIcon />
         <span>Inbox</span>
+        <InboxUnreadCount />
       </SidebarMenuButton>
       <div className="flex shrink-0 items-center">
         {hasProjects ? (
