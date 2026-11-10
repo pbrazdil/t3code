@@ -357,6 +357,9 @@ export const DesktopInboxMessageSchema = Schema.Struct({
   conversation: Schema.NullOr(Schema.String),
   /** The channel's own id for the chat; lets a page be limited to that chat. */
   conversationId: Schema.NullOr(Schema.String),
+  /** Profile pictures as small data URLs. */
+  senderAvatar: Schema.NullOr(Schema.String),
+  conversationAvatar: Schema.NullOr(Schema.String),
   text: Schema.String,
   /** What the message carries besides text; `image` is a small preview as a data URL. */
   media: Schema.NullOr(

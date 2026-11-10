@@ -38,6 +38,8 @@ const ChannelMessage = Schema.Struct({
   sender: Schema.NullOr(Schema.String),
   conversation: Schema.NullOr(Schema.String),
   conversationId: Schema.optional(Schema.NullOr(Schema.String)),
+  senderAvatar: Schema.optional(Schema.NullOr(Schema.String)),
+  conversationAvatar: Schema.optional(Schema.NullOr(Schema.String)),
   media: Schema.optional(
     Schema.NullOr(Schema.Struct({ label: Schema.String, image: Schema.NullOr(Schema.String) })),
   ),
@@ -95,6 +97,8 @@ const make = Effect.gen(function* () {
       id: `${config.id}:${row.id}`,
       channelId: config.id,
       conversationId: row.conversationId ?? null,
+      senderAvatar: row.senderAvatar ?? null,
+      conversationAvatar: row.conversationAvatar ?? null,
       media: row.media ?? null,
     }));
   });

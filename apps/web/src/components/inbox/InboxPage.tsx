@@ -150,6 +150,33 @@ function initialOf(name: string) {
   ).toUpperCase();
 }
 
+const LABEL_TONE = { text: "text-(--label)", avatar: "bg-(--label)/15" };
+
+function Avatar({
+  name,
+  image,
+  tone,
+}: {
+  name: string;
+  image: string | null;
+  tone: { text: string; avatar: string };
+}) {
+  return image ? (
+    <img src={image} alt="" className="size-7 shrink-0 rounded-full object-cover" />
+  ) : (
+    <span
+      aria-hidden
+      className={cn(
+        "flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+        tone.avatar,
+        tone.text,
+      )}
+    >
+      {initialOf(name)}
+    </span>
+  );
+}
+
 const URL_PATTERN = /(https?:\/\/[^\s<>]+)/;
 const EMOJI_ONLY = /^[\p{Extended_Pictographic}\p{Emoji_Component}\s]+$/u;
 
@@ -211,16 +238,7 @@ function MessageBubble({
     >
       {showSender && !own ? (
         last ? (
-          <span
-            aria-hidden
-            className={cn(
-              "flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
-              tone.avatar,
-              tone.text,
-            )}
-          >
-            {initialOf(sender)}
-          </span>
+          <Avatar name={sender} image={message.senderAvatar} tone={tone} />
         ) : (
           <span aria-hidden className="w-7 shrink-0" />
         )
@@ -444,12 +462,7 @@ export function InboxPage({ search }: { search: InboxSearch }) {
                   >
                     {conversation === null ? (
                       <div className="flex min-w-0 items-center gap-2.5">
-                        <span
-                          aria-hidden
-                          className="flex size-7 shrink-0 items-center justify-center rounded-full bg-(--label)/15 text-xs font-semibold text-(--label)"
-                        >
-                          {initialOf(name)}
-                        </span>
+                        <Avatar name={name} image={last.conversationAvatar} tone={LABEL_TONE} />
                         {group.conversationId !== null ? (
                           <Link
                             to="/inbox"
