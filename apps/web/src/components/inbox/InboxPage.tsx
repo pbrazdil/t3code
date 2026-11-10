@@ -440,7 +440,7 @@ function EnvironmentBadge({ channel }: { channel: DesktopInboxChannel }) {
   return (
     <Badge variant="label" style={{ "--label": channel.color } as CSSProperties}>
       <Icon aria-hidden className="size-3" />
-      {channel.label} · {CHANNEL_LABEL[channel.channel] ?? channel.channel}
+      {channel.label}
     </Badge>
   );
 }
@@ -616,6 +616,7 @@ export function InboxPage({ search }: { search: InboxSearch }) {
     else tasksByEnvironment.set(task.environmentId, [task]);
   }
   const channelById = new Map(inbox.channels.map((channel) => [channel.id, channel]));
+  const crumbChannel = channelById.get(conversation?.channelId ?? local.environment ?? "");
   const conversationName = conversation ? (inbox.messages.at(-1)?.conversation ?? "Chat") : null;
   const shown =
     filter === "starred"
@@ -659,16 +660,32 @@ export function InboxPage({ search }: { search: InboxSearch }) {
         <WorkspacePageHeader electron={isElectron} className="bg-background">
           <WorkspaceBreadcrumb ariaLabel="Inbox breadcrumb">
             {conversationName === null ? (
-              <WorkspaceBreadcrumbItem current>
+              <WorkspaceBreadcrumbItem current={crumbChannel === undefined}>
                 <h1 className="truncate">Inbox</h1>
               </WorkspaceBreadcrumbItem>
             ) : (
+              <WorkspaceBreadcrumbItem>
+                <Link to="/inbox" className="text-muted-foreground hover:text-foreground">
+                  Inbox
+                </Link>
+              </WorkspaceBreadcrumbItem>
+            )}
+            {crumbChannel ? (
               <>
-                <WorkspaceBreadcrumbItem>
-                  <Link to="/inbox" className="text-muted-foreground hover:text-foreground">
-                    Inbox
-                  </Link>
+                <WorkspaceBreadcrumbSeparator />
+                <WorkspaceBreadcrumbItem current={conversationName === null}>
+                  <span
+                    className="flex items-center gap-1.5 text-muted-foreground"
+                    style={{ "--label": crumbChannel.color } as CSSProperties}
+                  >
+                    <span aria-hidden className="size-2 shrink-0 rounded-full bg-(--label)" />
+                    {crumbChannel.label}
+                  </span>
                 </WorkspaceBreadcrumbItem>
+              </>
+            ) : null}
+            {conversationName === null ? null : (
+              <>
                 <WorkspaceBreadcrumbSeparator />
                 <WorkspaceBreadcrumbItem current className="min-w-0">
                   <h1 className="truncate">{conversationName}</h1>
