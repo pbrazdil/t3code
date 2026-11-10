@@ -65,6 +65,15 @@ const EMPTY_INBOX: InboxState = {
 // Reopening the Inbox or a chat shows what was loaded last time while the newest page refreshes.
 const inboxCache = new Map<string, InboxState>();
 
+/** The chat card at the top of the view and how far it sits from the top edge. */
+interface ScrollPosition {
+  readonly group: string;
+  readonly offset: number;
+}
+
+// Where each list was left when scrolled away from the newest message, to return there.
+const inboxScroll = new Map<string, ScrollPosition>();
+
 // Matches INBOX_DEV_PATH in vite/inboxDev.ts: the dev server reads the channels for a browser.
 async function loadDevInboxPage(input: DesktopInboxPageInput) {
   const response = await fetch("/__garden/inbox", { method: "POST", body: JSON.stringify(input) });
@@ -321,7 +330,28 @@ export function InboxPage({ search }: { search: InboxSearch }) {
   const refreshNewestRef = useRef(inboxCache.has(cacheKey));
   // Where the scroll position goes once the next list renders: the bottom, or the
   // message that was at the top before older ones were added above it.
-  const anchorRef = useRef<"bottom" | { height: number; top: number } | null>("bottom");
+  const anchorRef = useRef<"bottom" | { height: number; top: number } | ScrollPosition | null>(
+    inboxScroll.get(cacheKey) ?? "bottom",
+  );
+
+  const rememberScroll = () => {
+    const scroller = scrollRef.current;
+    if (!scroller) return;
+    if (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < STICK_TO_BOTTOM_PX) {
+      inboxScroll.delete(cacheKey);
+      return;
+    }
+    const top = scroller.getBoundingClientRect().top;
+    const groups = scroller.querySelectorAll<HTMLElement>("[data-inbox-group]");
+    for (let index = groups.length - 1; index >= 0; index -= 1) {
+      const group = groups[index]!;
+      const offset = group.getBoundingClientRect().top - top;
+      if (offset <= 0 || index === 0) {
+        inboxScroll.set(cacheKey, { group: group.dataset.inboxGroup!, offset });
+        return;
+      }
+    }
+  };
 
   const load = useEffectEvent(async (direction: "older" | "newest") => {
     if (loadingRef.current || (direction === "older" && !inbox.hasMore)) return;
@@ -378,10 +408,21 @@ export function InboxPage({ search }: { search: InboxSearch }) {
     const anchor = anchorRef.current;
     if (!scroller || anchor === null) return;
     anchorRef.current = null;
-    scroller.scrollTop =
-      anchor === "bottom"
-        ? scroller.scrollHeight
-        : anchor.top + scroller.scrollHeight - anchor.height;
+    if (anchor === "bottom") {
+      scroller.scrollTop = scroller.scrollHeight;
+    } else if ("group" in anchor) {
+      const group = Array.from(scroller.querySelectorAll<HTMLElement>("[data-inbox-group]")).find(
+        (element) => element.dataset.inboxGroup === anchor.group,
+      );
+      scroller.scrollTop = group
+        ? scroller.scrollTop +
+          group.getBoundingClientRect().top -
+          scroller.getBoundingClientRect().top -
+          anchor.offset
+        : scroller.scrollHeight;
+    } else {
+      scroller.scrollTop = anchor.top + scroller.scrollHeight - anchor.height;
+    }
   });
 
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- IntersectionObserver on the top-of-list sentinel loads older pages; a cached list also refreshes its newest page once
@@ -450,7 +491,11 @@ export function InboxPage({ search }: { search: InboxSearch }) {
 
         <div
           ref={scrollRef}
-          className="topbar-scroll-fade scrollbar-gutter-both min-h-0 flex-1 overflow-y-auto"
+          onScroll={rememberScroll}
+          // Area focus lands here; the first chat link would pull the list to its oldest end.
+          data-workspace-focus-default
+          tabIndex={0}
+          className="topbar-scroll-fade scrollbar-gutter-both min-h-0 flex-1 overflow-y-auto outline-none"
         >
           <WorkspacePageContainer width="readable" className="min-h-full justify-end gap-4">
             <ul className="m-0 flex list-none flex-col gap-2 p-0">
@@ -468,6 +513,7 @@ export function InboxPage({ search }: { search: InboxSearch }) {
                 return (
                   <li
                     key={group.key}
+                    data-inbox-group={group.key}
                     style={{ "--label": channel.color } as CSSProperties}
                     className="flex flex-col gap-3 rounded-xl border border-l-4 border-l-(--label) bg-card px-4 py-3 shadow-xs"
                   >
