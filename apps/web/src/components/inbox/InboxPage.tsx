@@ -973,7 +973,7 @@ export function InboxPage({ search }: { search: InboxSearch }) {
               )}
             </div>
             <aside
-              className="sticky top-0 hidden w-1/2 shrink-0 flex-col gap-4 self-start overflow-y-auto border-l px-4 py-6 lg:flex"
+              className="sticky top-0 hidden w-1/2 shrink-0 flex-col gap-4 self-start overflow-y-auto px-4 py-6 lg:flex"
               // As tall as the scroller's viewport, so the widgets stay put while messages scroll.
               style={{ height: "100cqh" }}
             >
