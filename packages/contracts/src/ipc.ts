@@ -391,6 +391,31 @@ export const DesktopInboxPageSchema = Schema.Struct({
 });
 export type DesktopInboxPage = typeof DesktopInboxPageSchema.Type;
 
+export const DesktopInboxCalendarInputSchema = Schema.Struct({
+  /** ISO times; events touching the time between them are returned. */
+  start: Schema.String,
+  end: Schema.String,
+});
+export type DesktopInboxCalendarInput = typeof DesktopInboxCalendarInputSchema.Type;
+
+export const DesktopInboxCalendarEventSchema = Schema.Struct({
+  id: Schema.String,
+  title: Schema.String,
+  start: Schema.String,
+  end: Schema.String,
+  allDay: Schema.Boolean,
+  location: Schema.NullOr(Schema.String),
+});
+export type DesktopInboxCalendarEvent = typeof DesktopInboxCalendarEventSchema.Type;
+
+export const DesktopInboxCalendarSchema = Schema.Struct({
+  /** False when `<home>/inbox/calendar.json` does not exist. */
+  configured: Schema.Boolean,
+  events: Schema.Array(DesktopInboxCalendarEventSchema),
+  error: Schema.NullOr(Schema.String),
+});
+export type DesktopInboxCalendar = typeof DesktopInboxCalendarSchema.Type;
+
 export const DesktopInboxTaskStatusSchema = Schema.Literals(["todo", "in-progress", "done"]);
 export type DesktopInboxTaskStatus = typeof DesktopInboxTaskStatusSchema.Type;
 
@@ -1247,6 +1272,8 @@ export interface DesktopBridge {
     /** Tasks of every environment, stored in `<home>/inbox/tasks/<environment>.json`. */
     loadTasks: () => Promise<ReadonlyArray<DesktopInboxTask>>;
     saveTasks: (input: DesktopInboxTasksSaveInput) => Promise<void>;
+    /** Events of the calendar whose iCal address is in `<home>/inbox/calendar.json`. */
+    loadCalendar: (input: DesktopInboxCalendarInput) => Promise<DesktopInboxCalendar>;
   };
   webLinks: {
     setReady: (ready: boolean) => Promise<void>;

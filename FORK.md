@@ -94,6 +94,8 @@ v `/Users/petrbrazdil/Repos/garden/zulip`.
 
 Úkoly z Inboxu se ukládají po prostředích do `~/.garden/inbox/tasks/<id prostředí>.json` (název, stav, odkazy na PR, výňatky přiřazených zpráv). Ve vývojovém webu je čte a zapisuje stejný dev endpoint.
 
+Widget kalendáře v Inboxu ukazuje dnešní události z iCal adresy v `~/.garden/inbox/calendar.json` (`{"url": "…"}`). Tajná adresa kalendáře je přístupový údaj, soubor má práva 600 a zůstává mimo repozitář. Opakované události rozbaluje knihovna `ical.js`. Bez souboru se widget nezobrazí.
+
 Fork má vlastní název `Garden` a bundle ID `com.pbrazdil.garden`, aby jej
 macOS odlišil od oficiální aplikace i při přístupu k šifrovacímu klíči Electronu
 v Klíčence. Vnitřní název zabalené aplikace je `garden`; také ten musí zůstat

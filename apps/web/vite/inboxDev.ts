@@ -2,14 +2,22 @@ import * as NodeOS from "node:os";
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- Vite plugin code runs outside any Effect runtime.
 import * as NodePath from "node:path";
 
+import { loadInboxCalendar } from "@t3tools/shared/inboxCalendar";
 import { loadInboxPage } from "@t3tools/shared/inboxChannels";
 import { loadInboxTasks, saveInboxTasks } from "@t3tools/shared/inboxTasks";
-import { DesktopInboxTasksSaveInputSchema } from "@t3tools/contracts";
+import {
+  DesktopInboxCalendarInputSchema,
+  DesktopInboxTasksSaveInputSchema,
+} from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import type { Plugin } from "vite-plus";
 
 const decodeTasksSaveInput = Schema.decodeUnknownSync(
   Schema.fromJsonString(DesktopInboxTasksSaveInputSchema),
+);
+
+const decodeCalendarInput = Schema.decodeUnknownSync(
+  Schema.fromJsonString(DesktopInboxCalendarInputSchema),
 );
 
 const INBOX_DEV_PATH = "/__garden/inbox";
@@ -22,6 +30,7 @@ const INBOX_DIR = NodePath.join(
 );
 const CONFIG_PATH = NodePath.join(INBOX_DIR, "channels.json");
 const TASKS_DIR = NodePath.join(INBOX_DIR, "tasks");
+const CALENDAR_PATH = NodePath.join(INBOX_DIR, "calendar.json");
 
 // Paths below INBOX_DEV_PATH, matching the desktop bridge's inbox methods.
 function handle(path: string, body: string): Promise<unknown> {
@@ -29,6 +38,7 @@ function handle(path: string, body: string): Promise<unknown> {
   if (path === "/tasks/save") {
     return saveInboxTasks(TASKS_DIR, decodeTasksSaveInput(body)).then(() => null);
   }
+  if (path === "/calendar") return loadInboxCalendar(CALENDAR_PATH, decodeCalendarInput(body));
   return loadInboxPage(CONFIG_PATH, JSON.parse(body));
 }
 

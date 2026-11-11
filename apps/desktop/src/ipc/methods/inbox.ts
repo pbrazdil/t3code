@@ -1,4 +1,6 @@
 import {
+  DesktopInboxCalendarInputSchema,
+  DesktopInboxCalendarSchema,
   DesktopInboxPageInputSchema,
   DesktopInboxPageSchema,
   DesktopInboxTaskSchema,
@@ -35,5 +37,14 @@ export const saveInboxTasks = makeIpcMethod({
   result: Schema.Void,
   handler: Effect.fn("desktop.ipc.inbox.saveTasks")(function* (input) {
     yield* (yield* DesktopInbox.DesktopInbox).saveTasks(input);
+  }),
+});
+
+export const loadInboxCalendar = makeIpcMethod({
+  channel: IpcChannels.INBOX_LOAD_CALENDAR_CHANNEL,
+  payload: DesktopInboxCalendarInputSchema,
+  result: DesktopInboxCalendarSchema,
+  handler: Effect.fn("desktop.ipc.inbox.loadCalendar")(function* (input) {
+    return yield* (yield* DesktopInbox.DesktopInbox).loadCalendar(input);
   }),
 });

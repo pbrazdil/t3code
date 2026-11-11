@@ -375,6 +375,10 @@
       "types": "./src/inboxChannels.ts",
       "import": "./src/inboxChannels.ts"
     },
+    "./inboxCalendar": {
+      "types": "./src/inboxCalendar.ts",
+      "import": "./src/inboxCalendar.ts"
+    },
     "./inboxTasks": {
       "types": "./src/inboxTasks.ts",
       "import": "./src/inboxTasks.ts"
@@ -562,6 +566,7 @@
     "@t3tools/contracts": "workspace:*",
     "effect": "catalog:",
     "ffi-rs": "1.3.2",
+    "ical.js": "2.2.1",
     "mdast-util-directive": "catalog:",
     "mdast-util-to-hast": "^13.2.1",
     "micromark-extension-directive": "catalog:",

@@ -36,6 +36,7 @@ export const CLI_COMMAND_ADD_TO_PATH_CHANNEL = "desktop:cli-command-add-to-path"
 export const INBOX_LOAD_PAGE_CHANNEL = "desktop:inbox-load-page";
 export const INBOX_LOAD_TASKS_CHANNEL = "desktop:inbox-load-tasks";
 export const INBOX_SAVE_TASKS_CHANNEL = "desktop:inbox-save-tasks";
+export const INBOX_LOAD_CALENDAR_CHANNEL = "desktop:inbox-load-calendar";
 export const GET_APP_BRANDING_CHANNEL = "desktop:get-app-branding";
 export const GET_RELAY_TELEMETRY_ENABLED_CHANNEL = "desktop:get-relay-telemetry-enabled";
 export const GET_SYSTEM_LOCALE_CHANNEL = "desktop:get-system-locale";

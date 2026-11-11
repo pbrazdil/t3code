@@ -51,6 +51,7 @@ import {
   useInboxUnreadLabel,
   useNewestInboxMessages,
 } from "./inboxFeed";
+import { InboxCalendarWidget } from "./InboxCalendar";
 import { InboxEnvironmentIcon } from "./InboxEnvironmentIcon";
 import { InboxTasksWidget, MessageTaskMenu } from "./InboxTasks";
 import { useInboxTasks } from "./inboxTaskStore";
@@ -1007,6 +1008,7 @@ export function InboxPage({ search }: { search: InboxSearch }) {
               style={{ height: "100cqh" }}
             >
               <InboxTasksWidget channels={inbox.channels} environment={local.environment} />
+              <InboxCalendarWidget />
             </aside>
           </div>
         </div>
