@@ -13,6 +13,8 @@ interface InboxLocalState {
   readonly starred: ReadonlyMap<string, DesktopInboxMessage>;
   /** Channel id of the only environment shown and counted; null shows all. */
   readonly environment: string | null;
+  /** Per channel id: messages received up to this time count as read unless marked unread. */
+  readonly readBefore: Readonly<Record<string, string>>;
 }
 
 interface StoredState {
@@ -21,6 +23,7 @@ interface StoredState {
   readonly unread: ReadonlyArray<string>;
   readonly starred: ReadonlyArray<DesktopInboxMessage>;
   readonly environment?: string | null;
+  readonly readBefore?: Readonly<Record<string, string>>;
 }
 
 function readStored(): InboxLocalState {
@@ -33,6 +36,7 @@ function readStored(): InboxLocalState {
         unread: new Set(stored.unread),
         starred: new Map(stored.starred.map((message) => [message.id, message])),
         environment: stored.environment ?? null,
+        readBefore: stored.readBefore ?? {},
       };
     }
   } catch {
@@ -44,6 +48,7 @@ function readStored(): InboxLocalState {
     unread: new Set(),
     starred: new Map(),
     environment: null,
+    readBefore: {},
   };
 }
 
@@ -58,6 +63,7 @@ function serialize(next: InboxLocalState, withImages: boolean) {
         : { ...message, media: { ...message.media, image: null } },
     ),
     environment: next.environment,
+    readBefore: next.readBefore,
   };
   return JSON.stringify(stored);
 }
@@ -91,7 +97,9 @@ export function useInboxLocalState() {
 
 export function isInboxMessageUnread(local: InboxLocalState, message: DesktopInboxMessage) {
   if (message.sender === "You" || local.read.has(message.id)) return false;
-  return local.unread.has(message.id) || message.unread || message.receivedAt > local.baseline;
+  if (local.unread.has(message.id)) return true;
+  if (message.receivedAt <= (local.readBefore[message.channelId] ?? "")) return false;
+  return message.unread || message.receivedAt > local.baseline;
 }
 
 export function setInboxMessagesRead(ids: ReadonlyArray<string>, read: boolean) {
@@ -116,4 +124,15 @@ export function isInboxEnvironmentShown(local: InboxLocalState, channelId: strin
 
 export function showInboxEnvironment(environment: string | null) {
   commit({ ...state, environment });
+}
+
+/** Marks everything one environment received so far as read, loaded here or not. */
+export function markInboxEnvironmentRead(environment: string) {
+  // Message ids start with their channel id; marks older than this moment no longer apply.
+  const unread = new Set([...state.unread].filter((id) => !id.startsWith(`${environment}:`)));
+  commit({
+    ...state,
+    unread,
+    readBefore: { ...state.readBefore, [environment]: new Date().toISOString() },
+  });
 }

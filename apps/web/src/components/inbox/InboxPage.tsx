@@ -57,6 +57,7 @@ import { useInboxTasks } from "./inboxTaskStore";
 import {
   isInboxEnvironmentShown,
   isInboxMessageUnread,
+  markInboxEnvironmentRead,
   setInboxMessagesRead,
   showInboxEnvironment,
   toggleInboxMessageStar,
@@ -696,6 +697,7 @@ export function InboxPage({ search }: { search: InboxSearch }) {
   }, []);
 
   const newestMessages = useNewestInboxMessages();
+  const unreadLabel = useInboxUnreadLabel();
   const { tasks } = useInboxTasks();
   const tasksByEnvironment = new Map<string, Array<DesktopInboxTask>>();
   for (const task of tasks) {
@@ -805,6 +807,19 @@ export function InboxPage({ search }: { search: InboxSearch }) {
             )}
           </WorkspaceBreadcrumb>
           <div className="min-w-0 flex-1" />
+          {conversation === null && local.environment !== null ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={unreadLabel(local.environment) === null}
+              onClick={() => {
+                if (local.environment !== null) markInboxEnvironmentRead(local.environment);
+              }}
+            >
+              <CheckCheckIcon />
+              Mark all read
+            </Button>
+          ) : null}
           <ToggleGroup
             aria-label="Show messages"
             value={[filter]}
